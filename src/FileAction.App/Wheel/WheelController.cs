@@ -115,6 +115,7 @@ internal sealed class WheelController
     private void Open(WheelMode mode, WheelKind wheel, IReadOnlyList<FileItem>? items, Win32.POINT at)
     {
         _wheel?.Finish();
+        UI.Theme.Refresh();
         var window = new WheelWindow(mode, wheel, items, _settings, Operations, _jobs.Start);
         window.Closed += (_, _) =>
         {

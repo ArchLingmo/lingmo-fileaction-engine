@@ -25,10 +25,12 @@ internal static class SelfTest
         {
             Directory.CreateDirectory(outDir);
             _ = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-            foreach (var language in new[] { Language.English, Language.Czech })
+            foreach (var (language, dark, folder) in new[] { (Language.English, true, "en"), (Language.English, false, "en-light"), (Language.Czech, true, "cs") })
             {
                 Loc.Current = language;
-                RenderAll(Path.Combine(outDir, language == Language.English ? "en" : "cs"), language == Language.English, log);
+                Theme.Override = dark;
+                Theme.Refresh();
+                RenderAll(Path.Combine(outDir, folder), language == Language.English, log);
             }
 
             File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
@@ -85,11 +87,11 @@ internal static class SelfTest
         log.Add($"ok {Path.GetFileName(outDir)}/settings");
 
         var jobs = new JobsWindow();
-        var running = jobs.Add(N("Převod na MP4", "Convert to MP4"), N("klip.mov", "clip.mov"), () => { });
+        var running = jobs.Add(N("Převod na MP4", "Convert to MP4"), N("klip.mov", "clip.mov"), () => { }, @"C:\x.mov");
         running.Report(0.42);
-        jobs.Add(N("Komprimovat", "Compress"), N("dovolená.jpg", "vacation.jpg"), () => { }).Complete([N(@"C:\Fotky\dovolená (komprimováno).jpg", @"C:\Photos\vacation (compressed).jpg")], null);
-        jobs.Add(N("Převod na DOCX", "Convert to DOCX"), N("smlouva.pdf", "contract.pdf"), () => { }).Fail(N("Chybí nástroj Pandoc. Nainstalujte ho příkazem: ", "Pandoc is missing. Install it with: ") + "winget install JohnMacFarlane.Pandoc");
-        SaveWindow(jobs, Path.Combine(outDir, "jobs.png"), 360, dark: true);
+        jobs.Add(N("Komprimovat", "Compress"), N("dovolená.jpg", "vacation.jpg"), () => { }, @"C:\x.jpg").Complete([N(@"C:\Fotky\dovolená (komprimováno).jpg", @"C:\Photos\vacation (compressed).jpg")], null);
+        jobs.Add(N("Převod na DOCX", "Convert to DOCX"), N("smlouva.pdf", "contract.pdf"), () => { }, @"C:\x.pdf").Fail(N("Chybí nástroj Pandoc. Nainstalujte ho příkazem: ", "Pandoc is missing. Install it with: ") + "winget install JohnMacFarlane.Pandoc");
+        SaveWindow(jobs, Path.Combine(outDir, "jobs.png"), 380, desktop: true);
         jobs.Close();
         log.Add($"ok {Path.GetFileName(outDir)}/jobs");
 
@@ -99,20 +101,25 @@ internal static class SelfTest
         log.Add($"ok {Path.GetFileName(outDir)}/parameter dialog");
     }
 
-    private static void SaveWindow(Window window, string file, double width, bool dark = false)
+    private static void SaveWindow(Window window, string file, double width, bool desktop = false)
     {
         var content = (UIElement)window.Content;
         window.Content = null;
         var root = new Border
         {
             Width = width,
-            Background = dark ? new SolidColorBrush(Color.FromRgb(0x2F, 0x4F, 0x6F)) : window.Background ?? Brushes.White,
+            Background = desktop ? Desktop() : window.Background ?? Brushes.White,
             Child = content,
         };
         if (content is ScrollViewer scroll)
             scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
         SaveElement(root, file);
     }
+
+    /// <summary>A wallpaper-like backdrop for floating surfaces in previews.</summary>
+    public static Brush Desktop() => Theme.IsDark
+        ? new LinearGradientBrush(Color.FromRgb(0x1F, 0x2A, 0x44), Color.FromRgb(0x3A, 0x2A, 0x4A), 45)
+        : new LinearGradientBrush(Color.FromRgb(0xC9, 0xD8, 0xEE), Color.FromRgb(0xE9, 0xD9, 0xEE), 45);
 
     public static void SaveElement(FrameworkElement element, string file)
     {

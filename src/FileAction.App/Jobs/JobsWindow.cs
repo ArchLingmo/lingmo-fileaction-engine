@@ -5,9 +5,12 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 using FileAction.App.Native;
 using FileAction.App.UI;
+using FileAction.Core;
 using static FileAction.Core.Loc;
 
 namespace FileAction.App.Jobs;
@@ -27,7 +30,7 @@ internal sealed class JobsWindow : Window
         Topmost = true;
         ShowInTaskbar = false;
         ShowActivated = false;
-        Width = 360;
+        Width = 380;
         SizeToContent = SizeToContent.Height;
         FontFamily = Theme.UiFont;
         Content = _cards;
@@ -36,9 +39,10 @@ internal sealed class JobsWindow : Window
         SizeChanged += (_, _) => PlaceInCorner();
     }
 
-    public JobCard Add(string title, string detail, Action cancel)
+    public JobCard Add(string title, string detail, Action cancel, string? iconPath = null)
     {
-        var card = new JobCard(title, detail, cancel, Remove);
+        Theme.Refresh();
+        var card = new JobCard(title, detail, iconPath, cancel, Remove);
         _cards.Children.Insert(0, card);
         if (!IsVisible)
             Show();
@@ -63,44 +67,69 @@ internal sealed class JobsWindow : Window
 
 internal sealed class JobCard : Border
 {
-    private readonly ProgressBar _bar;
+    private readonly Border _fill = new() { CornerRadius = new CornerRadius(2), Background = Theme.AccentGradient, HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
+    private readonly Grid _bar = new() { Height = 4, Margin = new Thickness(0, 10, 0, 0) };
     private readonly TextBlock _status;
     private readonly StackPanel _buttons;
+    private readonly TextBlock _badge;
     private readonly Action<JobCard> _remove;
     private readonly Action _cancel;
+    private double _value;
     private bool _done;
 
-    public JobCard(string title, string detail, Action cancel, Action<JobCard> remove)
+    public JobCard(string title, string detail, string? iconPath, Action cancel, Action<JobCard> remove)
     {
         _cancel = cancel;
         _remove = remove;
         Background = Theme.Panel;
         BorderBrush = Theme.PanelBorder;
         BorderThickness = new Thickness(1);
-        CornerRadius = new CornerRadius(10);
-        Margin = new Thickness(8, 4, 8, 4);
-        Padding = new Thickness(14, 10, 10, 12);
-        Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 14, ShadowDepth = 2, Opacity = 0.35 };
+        CornerRadius = new CornerRadius(14);
+        Margin = new Thickness(12, 6, 12, 6);
+        Padding = new Thickness(16, 14, 12, 14);
+        Effect = Theme.Shadow(22);
 
-        var titleText = new TextBlock { Text = title, Foreground = Theme.Text, FontWeight = FontWeights.SemiBold, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis };
-        var detailText = new TextBlock { Text = detail, Foreground = Theme.Muted, FontSize = 11.5, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 1, 0, 6) };
-        _bar = new ProgressBar { Height = 4, Minimum = 0, Maximum = 1, IsIndeterminate = true, Foreground = Theme.Accent, Background = Theme.AccentSoft, BorderThickness = new Thickness(0) };
-        _status = new TextBlock { Foreground = Theme.Muted, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
-        _buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 6, 0, 0) };
-        _buttons.Children.Add(LinkButton(T("Zrušit", "Cancel"), () => _cancel()));
-
-        var close = new Button
+        var icon = new Grid { Width = 40, Height = 40, Margin = new Thickness(0, 0, 14, 0), VerticalAlignment = VerticalAlignment.Top };
+        icon.Children.Add(new Border { CornerRadius = new CornerRadius(10), Background = Theme.Track });
+        var image = iconPath is null ? null : FileAction.App.Shell.FileIcons.Get(iconPath);
+        if (image is not null)
+            icon.Children.Add(new Image { Source = image, Width = 28, Height = 28 });
+        _badge = new TextBlock
         {
-            Content = new TextBlock { Text = "", FontFamily = Theme.Icons, FontSize = 10, Foreground = Theme.Muted },
-            Width = 22,
-            Height = 22,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
+            FontFamily = Theme.Icons,
+            FontSize = 11,
+            Foreground = Brushes.White,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var badge = new Grid { Width = 18, Height = 18, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, -4, -4), Visibility = Visibility.Collapsed };
+        badge.Children.Add(new Ellipse { Fill = Theme.Success, Stroke = Theme.Panel, StrokeThickness = 2 });
+        badge.Children.Add(_badge);
+        icon.Children.Add(badge);
+        _badgeHost = badge;
+
+        var titleText = new TextBlock { Text = title, Foreground = Theme.Text, FontFamily = Theme.DisplayFont, FontWeight = FontWeights.SemiBold, FontSize = 14, TextTrimming = TextTrimming.CharacterEllipsis };
+        var detailText = new TextBlock { Text = detail, Foreground = Theme.Muted, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 2, 0, 0) };
+        _bar.Children.Add(new Border { CornerRadius = new CornerRadius(2), Background = Theme.Track });
+        _bar.Children.Add(_fill);
+        _bar.SizeChanged += (_, _) => _fill.Width = _bar.ActualWidth * _value;
+        StartPulse();
+        _status = new TextBlock { Foreground = Theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
+        _buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 10, 0, 0) };
+        _buttons.Children.Add(UI.Controls.Button(T("Zrušit", "Cancel"), () => _cancel()));
+
+        var close = new TextBlock
+        {
+            Text = "\uE711",
+            FontFamily = Theme.Icons,
+            FontSize = 10,
+            Foreground = Theme.Muted,
+            Padding = new Thickness(6),
             Cursor = Cursors.Hand,
             VerticalAlignment = VerticalAlignment.Top,
             ToolTip = T("Zavřít", "Close"),
         };
-        close.Click += (_, _) =>
+        close.MouseLeftButtonUp += (_, _) =>
         {
             if (!_done)
                 _cancel();
@@ -112,39 +141,65 @@ internal sealed class JobCard : Border
         head.Children.Add(close);
         head.Children.Add(titleText);
 
-        var stack = new StackPanel();
-        stack.Children.Add(head);
-        stack.Children.Add(detailText);
-        stack.Children.Add(_bar);
-        stack.Children.Add(_status);
-        stack.Children.Add(_buttons);
-        Child = stack;
+        var body = new StackPanel();
+        body.Children.Add(head);
+        body.Children.Add(detailText);
+        body.Children.Add(_bar);
+        body.Children.Add(_status);
+        body.Children.Add(_buttons);
+
+        var row = new DockPanel();
+        DockPanel.SetDock(icon, Dock.Left);
+        row.Children.Add(icon);
+        row.Children.Add(body);
+        Child = row;
+
+        // Slide in from the right.
+        var slide = new TranslateTransform(40, 0);
+        RenderTransform = slide;
+        Opacity = 0;
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        slide.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(40, 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = ease });
+        BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)) { EasingFunction = ease });
+    }
+
+    private readonly Grid _badgeHost;
+
+    private void StartPulse()
+    {
+        // Indeterminate state: a short segment breathing until real progress arrives.
+        _fill.Width = 48;
+        _fill.BeginAnimation(OpacityProperty, new DoubleAnimation(0.35, 1, TimeSpan.FromMilliseconds(700)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
     }
 
     public void Report(double value)
     {
-        if (_done)
+        if (_done || value <= 0)
             return;
-        _bar.IsIndeterminate = value <= 0;
-        _bar.Value = value;
+        if (_value <= 0)
+        {
+            _fill.BeginAnimation(OpacityProperty, null);
+            _fill.Opacity = 1;
+        }
+        _value = Math.Clamp(value, 0, 1);
+        _fill.Width = _bar.ActualWidth * _value;
     }
 
     public void Complete(IReadOnlyList<string> outputs, string? warning)
     {
         _done = true;
-        _bar.IsIndeterminate = false;
-        _bar.Value = 1;
-        _bar.Foreground = Theme.Success;
+        SetFull(warning is null ? Theme.Success : Theme.Error);
+        ShowBadge(warning is null ? "\uE73E" : "\uE7BA", warning is null ? Theme.Success : Theme.Error);
         _status.Visibility = Visibility.Visible;
-        _status.Foreground = warning is null ? Theme.Success : Theme.Error;
-        _status.Text = warning ?? (outputs.Count == 1 ? T("Hotovo: ", "Done: ") + Path.GetFileName(outputs[0]) : T($"Hotovo: {outputs.Count} výstupů", $"Done: {outputs.Count} outputs"));
+        _status.Foreground = warning is null ? Theme.Muted : Theme.Error;
+        _status.Text = warning ?? (outputs.Count == 1 ? T("Hotovo: ", "Done: ") + System.IO.Path.GetFileName(outputs[0]) : T($"Hotovo: {outputs.Count} výstupů", $"Done: {outputs.Count} outputs"));
         _buttons.Children.Clear();
         if (outputs.Count > 0)
         {
             var first = outputs[0];
             if (File.Exists(first) && outputs.Count == 1)
-                _buttons.Children.Add(LinkButton(T("Otevřít", "Open"), () => Shell(first)));
-            _buttons.Children.Add(LinkButton(T("Zobrazit ve složce", "Show in folder"), () => Reveal(first)));
+                AddButton(UI.Controls.Button(T("Otevřít", "Open"), () => Shell(first), primary: true));
+            AddButton(UI.Controls.Button(T("Zobrazit ve složce", "Show in folder"), () => Reveal(first), glyph: Glyphs.Folder));
         }
         if (warning is null)
             CloseLater(TimeSpan.FromSeconds(8));
@@ -153,13 +208,13 @@ internal sealed class JobCard : Border
     public void Fail(string message)
     {
         _done = true;
-        _bar.IsIndeterminate = false;
-        _bar.Foreground = Theme.Error;
+        SetFull(Theme.Error);
+        ShowBadge("\uE711", Theme.Error);
         _status.Visibility = Visibility.Visible;
         _status.Foreground = Theme.Error;
         _status.Text = message;
         _buttons.Children.Clear();
-        _buttons.Children.Add(LinkButton(T("Kopírovat chybu", "Copy error"), () =>
+        AddButton(UI.Controls.Button(T("Kopírovat chybu", "Copy error"), () =>
         {
             try
             {
@@ -168,13 +223,37 @@ internal sealed class JobCard : Border
             catch (System.Runtime.InteropServices.COMException)
             {
             }
-        }));
+        }, glyph: Glyphs.Copy));
     }
 
     public void Cancelled()
     {
         _done = true;
         _remove(this);
+    }
+
+    private void SetFull(Brush brush)
+    {
+        _fill.BeginAnimation(OpacityProperty, null);
+        _fill.Opacity = 1;
+        _value = 1;
+        _fill.Background = brush;
+        _fill.Width = _bar.ActualWidth > 0 ? _bar.ActualWidth : 1000;
+        _fill.HorizontalAlignment = HorizontalAlignment.Stretch;
+    }
+
+    private void ShowBadge(string glyph, Brush color)
+    {
+        _badge.Text = glyph;
+        ((Ellipse)_badgeHost.Children[0]).Fill = color;
+        _badgeHost.Visibility = Visibility.Visible;
+    }
+
+    private void AddButton(Border button)
+    {
+        if (_buttons.Children.Count > 0)
+            button.Margin = new Thickness(8, 0, 0, 0);
+        _buttons.Children.Add(button);
     }
 
     private void CloseLater(TimeSpan delay)
@@ -189,20 +268,6 @@ internal sealed class JobCard : Border
                 CloseLater(TimeSpan.FromSeconds(3));
         };
         timer.Start();
-    }
-
-    private static Button LinkButton(string text, Action click)
-    {
-        var button = new Button
-        {
-            Content = new TextBlock { Text = text, Foreground = Theme.Accent, FontSize = 12 },
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Padding = new Thickness(8, 2, 8, 2),
-            Cursor = Cursors.Hand,
-        };
-        button.Click += (_, _) => click();
-        return button;
     }
 
     public static void Reveal(string path)

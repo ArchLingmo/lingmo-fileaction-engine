@@ -25,6 +25,7 @@ internal sealed class ShelfWindow : Window
 
     private ShelfWindow()
     {
+        Theme.Refresh();
         Title = T("Plovoucí panel", "Floating shelf");
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
@@ -34,14 +35,14 @@ internal sealed class ShelfWindow : Window
         ShowInTaskbar = false;
         ShowActivated = false;
         AllowDrop = true;
-        Width = 260;
+        Width = 290;
         SizeToContent = SizeToContent.Height;
         FontFamily = Theme.UiFont;
 
-        _header = new TextBlock { Foreground = Theme.Text, FontWeight = FontWeights.SemiBold, FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
-        var close = IconButton("", T("Zavřít", "Close"));
+        _header = new TextBlock { Foreground = Theme.Text, FontFamily = Theme.DisplayFont, FontWeight = FontWeights.SemiBold, FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
+        var close = IconButton("\uE711", T("Zavřít", "Close"));
         close.Click += (_, _) => Close();
-        var header = new DockPanel { Margin = new Thickness(12, 8, 6, 6), Background = Brushes.Transparent, Cursor = Cursors.SizeAll };
+        var header = new DockPanel { Margin = new Thickness(14, 10, 8, 8), Background = Brushes.Transparent, Cursor = Cursors.SizeAll };
         DockPanel.SetDock(close, Dock.Right);
         header.Children.Add(close);
         header.Children.Add(new TextBlock { Text = Glyphs.Pin, FontFamily = Theme.Icons, Foreground = Theme.Accent, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center });
@@ -61,6 +62,7 @@ internal sealed class ShelfWindow : Window
             MaxHeight = 360,
             SelectionMode = SelectionMode.Extended,
             ItemTemplate = BuildTemplate(),
+            ItemContainerStyle = ItemStyle(),
             Margin = new Thickness(6, 0, 6, 4),
         };
         ScrollViewer.SetHorizontalScrollBarVisibility(_list, ScrollBarVisibility.Disabled);
@@ -99,10 +101,10 @@ internal sealed class ShelfWindow : Window
             Background = Theme.Panel,
             BorderBrush = Theme.PanelBorder,
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(10),
+            CornerRadius = new CornerRadius(14),
             Child = stack,
-            Margin = new Thickness(8),
-            Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 16, ShadowDepth = 2, Opacity = 0.4 },
+            Margin = new Thickness(14),
+            Effect = Theme.Shadow(24),
         };
 
         DragOver += (_, e) =>
@@ -182,6 +184,27 @@ internal sealed class ShelfWindow : Window
         catch (System.ComponentModel.Win32Exception)
         {
         }
+    }
+
+    /// <summary>Rounded rows that highlight on hover and selection instead of the classic blue bar.</summary>
+    private static Style ItemStyle()
+    {
+        var border = new FrameworkElementFactory(typeof(Border), "Row");
+        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(8));
+        border.SetValue(Border.PaddingProperty, new Thickness(8, 5, 8, 5));
+        border.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+        border.AppendChild(new FrameworkElementFactory(typeof(ContentPresenter)));
+        var template = new ControlTemplate(typeof(ListBoxItem)) { VisualTree = border };
+        var hover = new Trigger { Property = IsMouseOverProperty, Value = true };
+        hover.Setters.Add(new Setter(Border.BackgroundProperty, Theme.Hover, "Row"));
+        var selected = new Trigger { Property = ListBoxItem.IsSelectedProperty, Value = true };
+        selected.Setters.Add(new Setter(Border.BackgroundProperty, Theme.AccentSoft, "Row"));
+        template.Triggers.Add(hover);
+        template.Triggers.Add(selected);
+        var style = new Style(typeof(ListBoxItem));
+        style.Setters.Add(new Setter(TemplateProperty, template));
+        style.Setters.Add(new Setter(MarginProperty, new Thickness(0, 1, 0, 1)));
+        return style;
     }
 
     private static DataTemplate BuildTemplate()

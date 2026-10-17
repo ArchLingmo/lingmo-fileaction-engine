@@ -28,10 +28,15 @@ internal sealed class WheelWindow : Window
     public delegate IReadOnlyList<Operation> OperationSource(WheelKind wheel, IReadOnlyList<FileItem> items);
 
     private const double OuterRadius = 196;
-    private const double InnerRadius = 74;
-    private const double Rim = 8;
-    private const double GapDegrees = 1.4;
-    private const double Size = 2 * (OuterRadius + Rim);
+    private const double InnerRadius = 80;
+    private const double Rim = 9;
+    private const double Gap = 6;
+    private const double Corner = 11;
+    private const double PopOut = 7;
+
+    /// <summary>Room around the disc for its shadow.</summary>
+    private const double Pad = 16;
+    private const double Size = 2 * (OuterRadius + Rim + Pad);
     private static readonly WheelKind[] WheelOrder = [WheelKind.Convert, WheelKind.Tools, WheelKind.Actions];
 
     private readonly AppSettings _settings;
@@ -40,10 +45,14 @@ internal sealed class WheelWindow : Window
     private readonly Canvas _canvas = new() { Width = Size, Height = Size };
     private readonly List<Path> _slices = [];
     private readonly List<StackPanel> _labels = [];
-    private readonly TextBlock _title = HubText(17, FontWeights.SemiBold);
+    private readonly List<Canvas> _groups = [];
+    private readonly Image _icon = new() { Width = 32, Height = 32, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 4) };
+    private readonly TextBlock _iconGlyph = new() { FontSize = 24, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 6) };
+    private readonly TextBlock _title = HubText(16, FontWeights.SemiBold);
     private readonly TextBlock _detail = HubText(11.5, FontWeights.Normal);
-    private readonly StackPanel _tabs = new() { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
-    private readonly StackPanel _hubContent = new() { Width = InnerRadius * 1.7 };
+    private readonly StackPanel _tabs = new() { Orientation = Orientation.Horizontal };
+    private readonly Border _tabTrack = new() { CornerRadius = new CornerRadius(10), Padding = new Thickness(2), HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
+    private readonly StackPanel _hubContent = new() { Width = InnerRadius * 1.75 };
 
     private IReadOnlyList<FileItem> _items;
     private IReadOnlyList<Operation> _ops = [];
@@ -87,9 +96,13 @@ internal sealed class WheelWindow : Window
         Content = _canvas;
         _canvas.RenderTransformOrigin = new Point(0.5, 0.5);
         _canvas.RenderTransform = new ScaleTransform(0.9, 0.9);
+        _tabTrack.Child = _tabs;
+        _iconGlyph.FontFamily = Theme.Icons;
+        _hubContent.Children.Add(_icon);
+        _hubContent.Children.Add(_iconGlyph);
         _hubContent.Children.Add(_title);
         _hubContent.Children.Add(_detail);
-        _hubContent.Children.Add(_tabs);
+        _hubContent.Children.Add(_tabTrack);
 
         SourceInitialized += (_, _) =>
         {
@@ -140,6 +153,7 @@ internal sealed class WheelWindow : Window
         var scale = (ScaleTransform)_canvas.RenderTransform;
         scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.9, 1, duration) { EasingFunction = ease });
         scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.9, 1, duration) { EasingFunction = ease });
+        AnimateSlicesIn();
 
         if (Mode == WheelMode.Click)
         {
@@ -181,6 +195,7 @@ internal sealed class WheelWindow : Window
         _wheel = wheel;
         LoadOperations();
         Build();
+        AnimateSlicesIn();
         if (Mode == WheelMode.Click && _ops.Count > 0)
             SetHighlight(0);
     }
@@ -210,7 +225,7 @@ internal sealed class WheelWindow : Window
         if (highlight >= 0 && highlight < _ops.Count)
             SetHighlight(highlight);
         Content = null;
-        var root = new Grid { Background = new SolidColorBrush(Color.FromRgb(0x2F, 0x4F, 0x6F)), Width = Size + 40, Height = Size + 40 };
+        var root = new Grid { Background = SelfTest.Desktop(), Width = Size, Height = Size };
         root.Children.Add(_canvas);
         _canvas.HorizontalAlignment = HorizontalAlignment.Center;
         _canvas.VerticalAlignment = VerticalAlignment.Center;
@@ -250,6 +265,7 @@ internal sealed class WheelWindow : Window
             _items = items;
             LoadOperations();
             Build();
+            AnimateSlicesIn();
         }
         _closeTimer?.Stop();
         var index = HitTest(e.GetPosition(_canvas), out _);
@@ -356,6 +372,7 @@ internal sealed class WheelWindow : Window
         _execute(op, items);
     }
 
+
     // ------------------------------------------------------------------ geometry
 
     private static Point Polar(double radius, double degrees)
@@ -363,6 +380,8 @@ internal sealed class WheelWindow : Window
         var rad = degrees * Math.PI / 180;
         return new Point(Size / 2 + radius * Math.Sin(rad), Size / 2 - radius * Math.Cos(rad));
     }
+
+    private static double Deg(double radians) => radians * 180 / Math.PI;
 
     private int HitTest(Point p, out bool inHub)
     {
@@ -377,16 +396,41 @@ internal sealed class WheelWindow : Window
         return (int)(((angle + step / 2) % 360) / step) % _ops.Count;
     }
 
+    /// <summary>
+    /// A ring segment between angles <paramref name="a0"/> and <paramref name="a1"/> with a constant-width gap
+    /// to its neighbours and rounded corners.
+    /// </summary>
     private static Geometry Sector(double a0, double a1)
     {
-        var large = a1 - a0 > 180;
-        var figure = new PathFigure { StartPoint = Polar(OuterRadius, a0), IsClosed = true, IsFilled = true };
-        figure.Segments.Add(new ArcSegment(Polar(OuterRadius, a1), new System.Windows.Size(OuterRadius, OuterRadius), 0, large, SweepDirection.Clockwise, true));
-        figure.Segments.Add(new LineSegment(Polar(InnerRadius, a1), true));
-        figure.Segments.Add(new ArcSegment(Polar(InnerRadius, a0), new System.Windows.Size(InnerRadius, InnerRadius), 0, large, SweepDirection.Counterclockwise, true));
+        // Angle of a point on an edge that is shifted sideways by half the gap, at radius r.
+        double Edge(double r, double a, int side) => a + side * Deg(Math.Asin(Gap / 2 / r));
+
+        var outerStart = Edge(OuterRadius, a0, 1);
+        var outerEnd = Edge(OuterRadius, a1, -1);
+        var innerStart = Edge(InnerRadius, a0, 1);
+        var innerEnd = Edge(InnerRadius, a1, -1);
+        var cOut = Math.Min(Corner, Rad(outerEnd - outerStart) * OuterRadius * 0.45);
+        var cIn = Math.Min(Corner * 0.7, Rad(innerEnd - innerStart) * InnerRadius * 0.45);
+        var dOut = Deg(cOut / OuterRadius);
+        var dIn = Deg(cIn / InnerRadius);
+
+        var start = Polar(OuterRadius, outerStart + dOut);
+        var figure = new PathFigure { StartPoint = start, IsClosed = true, IsFilled = true };
+        figure.Segments.Add(new ArcSegment(Polar(OuterRadius, outerEnd - dOut), new System.Windows.Size(OuterRadius, OuterRadius), 0,
+            outerEnd - outerStart - 2 * dOut > 180, SweepDirection.Clockwise, true));
+        figure.Segments.Add(new QuadraticBezierSegment(Polar(OuterRadius, outerEnd), Polar(OuterRadius - cOut, Edge(OuterRadius - cOut, a1, -1)), true));
+        figure.Segments.Add(new LineSegment(Polar(InnerRadius + cIn, Edge(InnerRadius + cIn, a1, -1)), true));
+        figure.Segments.Add(new QuadraticBezierSegment(Polar(InnerRadius, innerEnd), Polar(InnerRadius, innerEnd - dIn), true));
+        figure.Segments.Add(new ArcSegment(Polar(InnerRadius, innerStart + dIn), new System.Windows.Size(InnerRadius, InnerRadius), 0,
+            innerEnd - innerStart - 2 * dIn > 180, SweepDirection.Counterclockwise, true));
+        figure.Segments.Add(new QuadraticBezierSegment(Polar(InnerRadius, innerStart), Polar(InnerRadius + cIn, Edge(InnerRadius + cIn, a0, 1)), true));
+        figure.Segments.Add(new LineSegment(Polar(OuterRadius - cOut, Edge(OuterRadius - cOut, a0, 1)), true));
+        figure.Segments.Add(new QuadraticBezierSegment(Polar(OuterRadius, outerStart), start, true));
         var geometry = new PathGeometry([figure]);
         geometry.Freeze();
         return geometry;
+
+        static double Rad(double degrees) => degrees * Math.PI / 180;
     }
 
     private static Geometry Ring()
@@ -405,11 +449,10 @@ internal sealed class WheelWindow : Window
     {
         FontSize = size,
         FontWeight = weight,
-        Foreground = Theme.Text,
         TextAlignment = TextAlignment.Center,
         TextTrimming = TextTrimming.CharacterEllipsis,
         HorizontalAlignment = HorizontalAlignment.Center,
-        MaxWidth = InnerRadius * 1.6,
+        MaxWidth = InnerRadius * 1.65,
     };
 
     private void Build()
@@ -417,35 +460,38 @@ internal sealed class WheelWindow : Window
         _canvas.Children.Clear();
         _slices.Clear();
         _labels.Clear();
+        _groups.Clear();
 
+        var disc = OuterRadius + Rim;
         var backdrop = new Ellipse
         {
-            Width = Size,
-            Height = Size,
+            Width = 2 * disc,
+            Height = 2 * disc,
             Fill = Theme.Backdrop,
-            Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 18, ShadowDepth = 2, Opacity = 0.45 },
+            Stroke = Theme.BackdropEdge,
+            StrokeThickness = 1,
+            Effect = Theme.Shadow(28),
         };
+        Canvas.SetLeft(backdrop, Pad);
+        Canvas.SetTop(backdrop, Pad);
         _canvas.Children.Add(backdrop);
 
         var n = _ops.Count;
         var step = n == 0 ? 360 : 360.0 / n;
+        // Labels sit a little outside the middle of the ring, where slices are wider,
+        // and shrink to the slice's width instead of spilling into the neighbours.
+        var labelRadius = InnerRadius + (OuterRadius - InnerRadius) * 0.54;
+        var labelWidth = n <= 2 ? 120 : Math.Clamp(2 * labelRadius * Math.Sin(step / 2 * Math.PI / 180) * 0.84, 48, 110);
         for (var i = 0; i < n; i++)
         {
             var a0 = i * step - step / 2;
             var path = new Path
             {
-                Data = n == 1 ? Ring() : Sector(a0 + GapDegrees, a0 + step - GapDegrees),
+                Data = n == 1 ? Ring() : Sector(a0, a0 + step),
                 Fill = Theme.Slice,
+                Stroke = Theme.SliceEdge,
+                StrokeThickness = 1,
             };
-            _slices.Add(path);
-            _canvas.Children.Add(path);
-        }
-        // Labels sit a little outside the middle of the ring, where slices are wider,
-        // and shrink to the slice's width instead of spilling into the neighbours.
-        var labelRadius = InnerRadius + (OuterRadius - InnerRadius) * 0.55;
-        var labelWidth = n <= 2 ? 120 : Math.Clamp(2 * labelRadius * Math.Sin(step / 2 * Math.PI / 180) * 0.86, 48, 110);
-        for (var i = 0; i < n; i++)
-        {
             var label = SliceLabel(_ops[i]);
             var fit = new Viewbox
             {
@@ -460,28 +506,55 @@ internal sealed class WheelWindow : Window
             fit.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
             Canvas.SetLeft(fit, mid.X - fit.DesiredSize.Width / 2);
             Canvas.SetTop(fit, mid.Y - fit.DesiredSize.Height / 2);
+
+            // Slice and label move together when the slice pops out.
+            var group = new Canvas { Width = Size, Height = Size };
+            var transforms = new TransformGroup();
+            transforms.Children.Add(new ScaleTransform(1, 1, Size / 2, Size / 2));
+            transforms.Children.Add(new TranslateTransform());
+            group.RenderTransform = transforms;
+            group.Children.Add(path);
+            group.Children.Add(fit);
+            _slices.Add(path);
             _labels.Add(label);
-            _canvas.Children.Add(fit);
+            _groups.Add(group);
+            _canvas.Children.Add(group);
         }
 
+        var hubSize = 2 * (InnerRadius - 6);
         var hub = new Ellipse
         {
-            Width = 2 * (InnerRadius - 5),
-            Height = 2 * (InnerRadius - 5),
+            Width = hubSize,
+            Height = hubSize,
             Fill = Theme.Hub,
             Stroke = Theme.PanelBorder,
             StrokeThickness = 1,
+            Effect = Theme.Shadow(12),
         };
-        Canvas.SetLeft(hub, Size / 2 - hub.Width / 2);
-        Canvas.SetTop(hub, Size / 2 - hub.Height / 2);
+        Canvas.SetLeft(hub, Size / 2 - hubSize / 2);
+        Canvas.SetTop(hub, Size / 2 - hubSize / 2);
         _canvas.Children.Add(hub);
 
-        BuildTabs();
-        UpdateHubText();
+        BuildHub();
         _hubContent.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
         Canvas.SetLeft(_hubContent, Size / 2 - _hubContent.Width / 2);
         Canvas.SetTop(_hubContent, Size / 2 - _hubContent.DesiredSize.Height / 2);
         _canvas.Children.Add(_hubContent);
+    }
+
+    /// <summary>Slices grow out of the centre one after another.</summary>
+    private void AnimateSlicesIn()
+    {
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        for (var i = 0; i < _groups.Count; i++)
+        {
+            var delay = TimeSpan.FromMilliseconds(14 * i);
+            var duration = TimeSpan.FromMilliseconds(170);
+            var scale = (ScaleTransform)((TransformGroup)_groups[i].RenderTransform).Children[0];
+            _groups[i].BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { BeginTime = delay, EasingFunction = ease });
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.82, 1, duration) { BeginTime = delay, EasingFunction = ease });
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.82, 1, duration) { BeginTime = delay, EasingFunction = ease });
+        }
     }
 
     private static StackPanel SliceLabel(Operation op)
@@ -494,16 +567,17 @@ internal sealed class WheelWindow : Window
             {
                 Text = op.Glyph,
                 FontFamily = Theme.Icons,
-                FontSize = 18,
+                FontSize = 20,
                 Foreground = Theme.Text,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 3),
+                Margin = new Thickness(0, 0, 0, 5),
             });
         }
         panel.Children.Add(new TextBlock
         {
             Text = op.Label,
-            FontSize = isFormat ? 17 : 12.5,
+            FontFamily = Theme.DisplayFont,
+            FontSize = isFormat ? 19 : 13,
             FontWeight = FontWeights.SemiBold,
             Foreground = Theme.Text,
             TextAlignment = TextAlignment.Center,
@@ -515,18 +589,38 @@ internal sealed class WheelWindow : Window
             panel.Children.Add(new TextBlock
             {
                 Text = op.Subtitle,
+                Tag = "subtitle",
                 FontSize = 10.5,
                 Foreground = Theme.Muted,
                 TextAlignment = TextAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 1, 0, 0),
             });
         }
         return panel;
     }
 
-    private void BuildTabs()
+    private void BuildHub()
     {
+        _title.Foreground = Theme.Text;
+        _detail.Foreground = Theme.Muted;
+        _tabTrack.Background = Theme.Track;
+
+        if (_items.Count > 0)
+        {
+            _icon.Source = Shell.FileIcons.Get(_items[0].Path);
+            _icon.Visibility = _icon.Source is null ? Visibility.Collapsed : Visibility.Visible;
+            _iconGlyph.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            _icon.Visibility = Visibility.Collapsed;
+            _iconGlyph.Text = Glyphs.Extract;
+            _iconGlyph.Foreground = Theme.Accent;
+            _iconGlyph.Visibility = Visibility.Visible;
+        }
+
         _tabs.Children.Clear();
         foreach (var wheel in WheelOrder)
         {
@@ -536,17 +630,16 @@ internal sealed class WheelWindow : Window
             var active = wheel == _wheel;
             var tab = new Border
             {
-                CornerRadius = new CornerRadius(7),
-                Padding = new Thickness(6, 1, 6, 2),
-                Margin = new Thickness(2, 0, 2, 0),
-                Background = active ? Theme.Accent : Brushes.Transparent,
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(7, 1, 7, 2),
+                Background = active ? Theme.AccentGradient : Brushes.Transparent,
                 Cursor = Mode == WheelMode.Click ? Cursors.Hand : null,
                 ToolTip = AppSettings.WheelName(wheel),
                 Child = new TextBlock
                 {
                     Text = key == Input.ModifierKey.None ? AppSettings.WheelName(wheel) : AppSettings.KeyName(key),
                     FontSize = 10.5,
-                    FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal,
+                    FontWeight = FontWeights.SemiBold,
                     Foreground = active ? Theme.TextOnAccent : Theme.Muted,
                 },
             };
@@ -561,6 +654,7 @@ internal sealed class WheelWindow : Window
             }
             _tabs.Children.Add(tab);
         }
+        UpdateHubText();
     }
 
     private void SetHighlight(int index)
@@ -577,11 +671,33 @@ internal sealed class WheelWindow : Window
 
     private void Paint(int index, bool on)
     {
-        _slices[index].Fill = on ? Theme.Accent : Theme.Slice;
+        var slice = _slices[index];
+        slice.Fill = on ? Theme.AccentGradient : Theme.Slice;
+        slice.Stroke = on ? Brushes.Transparent : Theme.SliceEdge;
+        slice.Effect = on ? Theme.Glow() : null;
         foreach (var child in _labels[index].Children.OfType<TextBlock>())
         {
-            var muted = child.FontSize < 11;
-            child.Foreground = on ? Theme.TextOnAccent : muted ? Theme.Muted : Theme.Text;
+            var subtitle = Equals(child.Tag, "subtitle");
+            child.Foreground = on ? Theme.TextOnAccent : subtitle ? Theme.Muted : Theme.Text;
+            child.Opacity = on && subtitle ? 0.85 : 1;
+        }
+
+        // Pop the slice outwards along its middle angle.
+        var n = _ops.Count;
+        var angle = n <= 1 ? 0 : index * 360.0 / n * Math.PI / 180;
+        var distance = on && n > 1 ? PopOut : 0;
+        var move = (TranslateTransform)((TransformGroup)_groups[index].RenderTransform).Children[1];
+        var duration = TimeSpan.FromMilliseconds(130);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        if (IsVisible)
+        {
+            move.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(distance * Math.Sin(angle), duration) { EasingFunction = ease });
+            move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-distance * Math.Cos(angle), duration) { EasingFunction = ease });
+        }
+        else
+        {
+            move.X = distance * Math.Sin(angle);
+            move.Y = -distance * Math.Cos(angle);
         }
     }
 
@@ -603,8 +719,5 @@ internal sealed class WheelWindow : Window
             _detail.Text = DescribeItems();
     }
 
-    private string DescribeItems()
-    {
-        return _items.Count == 1 ? _items[0].Name : Items(_items.Count);
-    }
+    private string DescribeItems() => _items.Count == 1 ? _items[0].Name : Items(_items.Count);
 }

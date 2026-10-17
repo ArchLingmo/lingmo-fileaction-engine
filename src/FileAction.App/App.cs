@@ -64,6 +64,7 @@ internal sealed class App : Application
 
         _settings = AppSettings.Load();
         Loc.Current = _settings.Language ?? Loc.Detect();
+        Theme.Refresh();
         _tools = new ToolLocator();
         var jobs = new JobRunner(_settings, _tools);
 

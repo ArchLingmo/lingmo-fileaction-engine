@@ -39,7 +39,7 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
         using var cts = new CancellationTokenSource();
         var title = op.Wheel == WheelKind.Convert && op.Label.ToUpperInvariant() == op.Label ? T($"Převod na {op.Label}", $"Convert to {op.Label}") : op.Label;
         var detail = items.Count == 1 ? items[0].Name : Items(items.Count);
-        var card = _window.Add(title, detail, () =>
+        var card = _window.Add(title, detail, iconPath: items[0].Path, cancel: () =>
         {
             try
             {
