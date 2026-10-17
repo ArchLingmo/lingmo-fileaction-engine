@@ -11,6 +11,11 @@ Inspired by the wonderful [Tangerine](https://tangerineformac.com/) for macOS. F
   <img src="docs/screenshots/en/wheel-image-tools.png" width="32%" alt="Tools wheel for an image" />
   <img src="docs/screenshots/en/wheel-actions.png" width="32%" alt="Actions wheel" />
 </p>
+<p align="center">
+  <img src="docs/screenshots/en/wheel-light.png" width="32%" alt="Light mode" />
+  <img src="docs/screenshots/en/settings.png" width="32%" alt="Settings" />
+  <img src="docs/screenshots/en/jobs.png" width="32%" alt="Progress" />
+</p>
 
 ## How it works
 
@@ -68,7 +73,7 @@ FileAction handles images, PDFs, spreadsheets, subtitles and archives on its own
 
 Download `FileAction-Setup-x.y.z.exe` from [Releases](../../releases), or from the artifacts of the latest [GitHub Actions](../../actions) run. The installer doesn't need admin rights. A portable `.zip` is available too.
 
-The app speaks English and Czech; it follows your Windows display language and can be switched in Settings.
+The app speaks English and Czech and comes in light and dark mode; both follow your Windows settings, and the language can be switched in Settings.
 
 On first launch FileAction adds itself to startup and to the File Explorer context menu (both can be turned off in Settings). It then lives in the notification area next to the clock.
 

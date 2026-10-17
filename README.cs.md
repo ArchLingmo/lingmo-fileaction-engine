@@ -11,6 +11,11 @@ Inspirováno skvělou aplikací [Tangerine](https://tangerineformac.com/) pro ma
   <img src="docs/screenshots/cs/wheel-image-tools.png" width="32%" alt="Kolo Nástroje pro obrázek" />
   <img src="docs/screenshots/cs/wheel-actions.png" width="32%" alt="Kolo Akce" />
 </p>
+<p align="center">
+  <img src="docs/screenshots/cs/wheel-pdf-convert.png" width="32%" alt="Kolo Převést pro PDF" />
+  <img src="docs/screenshots/cs/settings.png" width="32%" alt="Nastavení" />
+  <img src="docs/screenshots/cs/jobs.png" width="32%" alt="Průběh" />
+</p>
 
 ## Jak to funguje
 
@@ -68,7 +73,7 @@ Co chybí, ukáže **Nastavení → Pomocné programy**, odkud jde i rovnou nain
 
 Stáhněte `FileAction-Setup-x.y.z.exe` z [Releases](../../releases) nebo z artefaktů posledního běhu [GitHub Actions](../../actions). Instalátor nepotřebuje práva správce. Jde také o přenosnou verzi v `.zip`.
 
-Aplikace je česky i anglicky; jazyk se řídí jazykem Windows a jde přepnout v nastavení.
+Aplikace je česky i anglicky a ve světlém i tmavém režimu; obojí se řídí nastavením Windows, jazyk jde přepnout v nastavení.
 
 Při prvním spuštění se FileAction zapíše do automatického spouštění a do kontextové nabídky Průzkumníka (obojí jde vypnout v nastavení). Pak běží v oznamovací oblasti vedle hodin.
 
