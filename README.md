@@ -92,6 +92,10 @@ publish\FileAction.exe
 
 `FileAction.exe --self-test <folder>` builds every window offscreen and saves PNG previews in both languages (used by CI).
 
+### Releasing
+
+Push a commit to `main` whose message starts with `Release v1.2.3` (or push a `v1.2.3` tag, or run the **Build** workflow manually with a version). CI builds the installer and zip and publishes them as a GitHub release.
+
 ## Project layout
 
 ```

@@ -92,6 +92,10 @@ publish\FileAction.exe
 
 `FileAction.exe --self-test <složka>` sestaví všechna okna mimo obrazovku a uloží jejich náhledy do PNG v obou jazycích (používá CI).
 
+### Vydání nové verze
+
+Pošlete do `main` commit, jehož zpráva začíná `Release v1.2.3` (nebo pushněte tag `v1.2.3`, případně ručně spusťte workflow **Build** s číslem verze). CI sestaví instalátor a zip a zveřejní je jako vydání na GitHubu.
+
 ## Struktura
 
 ```
