@@ -21,6 +21,9 @@ public class IntegrationTests : IClassFixture<IntegrationTests.Samples>
         public ToolLocator Tools { get; } = new();
         public Dictionary<string, string> Files { get; } = new();
 
+        /// <summary>Without LibreOffice the sample PDF is made of images only, so it has no text layer.</summary>
+        public bool PdfHasText { get; private set; }
+
         public Samples()
         {
             var png = Path.Combine(Dir, "obrázek.png");
@@ -43,6 +46,7 @@ public class IntegrationTests : IClassFixture<IntegrationTests.Samples>
             {
                 var produced = OfficeBackend.ConvertToTempAsync(Context(), Files["md"], "pdf").GetAwaiter().GetResult();
                 File.Move(produced, pdf);
+                PdfHasText = true;
             }
             else
             {
@@ -175,6 +179,10 @@ public class IntegrationTests : IClassFixture<IntegrationTests.Samples>
                     }
                     Assert.Empty(Directory.GetFiles(outDir, "*.part.*"));
                     output.WriteLine($"ok   {op.Id} → {string.Join(", ", result.Outputs.Select(Path.GetFileName))}");
+                }
+                catch (ConversionException ex) when (key is "pdf" && !_s.PdfHasText && ex.Message.Contains("neobsahuje žádný text"))
+                {
+                    output.WriteLine($"ok   {op.Id} (expected: image-only PDF has no text)");
                 }
                 catch (Exception ex)
                 {

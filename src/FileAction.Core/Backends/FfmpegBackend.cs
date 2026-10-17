@@ -22,7 +22,7 @@ public static partial class FfmpegBackend
             "mp4" => [.. h264, "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart"],
             "mov" => [.. h264, "-c:a", "aac", "-b:a", "160k"],
             "mkv" => [.. h264, "-c:a", "aac", "-b:a", "160k"],
-            "webm" => ["-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-row-mt", "1", "-deadline", "good", "-cpu-used", "4", "-c:a", "libopus", "-b:a", "128k"],
+            "webm" => ["-c:v", "libvpx-vp9", "-pix_fmt", "yuv420p", "-crf", "32", "-b:v", "0", "-row-mt", "1", "-deadline", "good", "-cpu-used", "4", "-c:a", "libopus", "-b:a", "128k"],
             "gif" => ["-vf", "fps=12,scale='min(640,iw)':-2:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4", "-loop", "0"],
             "mp3" => ["-vn", "-c:a", "libmp3lame", "-q:a", "2"],
             "m4a" => ["-vn", "-c:a", "aac", "-b:a", "192k"],
