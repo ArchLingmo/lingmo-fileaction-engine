@@ -67,6 +67,9 @@ internal sealed class JobsWindow : Window
 
 internal sealed class JobCard : Border
 {
+    /// <summary>Off in the self-test, where offscreen rendering doesn't advance animations.</summary>
+    public static bool Animate { get; set; } = true;
+
     private readonly Border _fill = new() { CornerRadius = new CornerRadius(2), Background = Theme.AccentGradient, HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
     private readonly Grid _bar = new() { Height = 4, Margin = new Thickness(0, 10, 0, 0) };
     private readonly TextBlock _status;
@@ -154,6 +157,9 @@ internal sealed class JobCard : Border
         row.Children.Add(body);
         Child = row;
 
+        if (!Animate)
+            return;
+
         // Slide in from the right.
         var slide = new TranslateTransform(40, 0);
         RenderTransform = slide;
@@ -167,6 +173,11 @@ internal sealed class JobCard : Border
 
     private void StartPulse()
     {
+        if (!Animate)
+        {
+            _fill.Width = 48;
+            return;
+        }
         // Indeterminate state: a short segment breathing until real progress arrives.
         _fill.Width = 48;
         _fill.BeginAnimation(OpacityProperty, new DoubleAnimation(0.35, 1, TimeSpan.FromMilliseconds(700)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });

@@ -25,6 +25,7 @@ internal static class SelfTest
         {
             Directory.CreateDirectory(outDir);
             _ = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            JobCard.Animate = false;
             foreach (var (language, dark, folder) in new[] { (Language.English, true, "en"), (Language.English, false, "en-light"), (Language.Czech, true, "cs") })
             {
                 Loc.Current = language;
