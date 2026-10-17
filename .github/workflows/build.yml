@@ -108,6 +108,23 @@ jobs:
           name: ui-previews
           path: self-test
 
+      - name: Replace an existing release of this version
+        if: env.PUBLISH == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          # GitHub keeps the original author when a release is updated, so a re-release deletes it first.
+          if (-not $env:GH_TOKEN) { Write-Host "No RELEASE_TOKEN secret: publishing as github-actions."; exit 0 }
+          Write-Host "Publishing as $(gh api user -q .login)"
+          gh release view "v$env:VERSION" -R $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release delete "v$env:VERSION" -R $env:GITHUB_REPOSITORY --yes --cleanup-tag
+            if ($LASTEXITCODE -ne 0) { throw "Could not delete the existing release v$env:VERSION" }
+            Write-Host "Deleted the existing release v$env:VERSION"
+          }
+          exit 0
+
       - name: Release
         if: env.PUBLISH == 'true'
         uses: softprops/action-gh-release@v2
