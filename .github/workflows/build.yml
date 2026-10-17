@@ -112,6 +112,9 @@ jobs:
         if: env.PUBLISH == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          # With a RELEASE_TOKEN secret (a personal access token) the release is published under that
+          # person's account; otherwise under github-actions.
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
           tag_name: v${{ env.VERSION }}
           target_commitish: ${{ github.sha }}
           name: FileAction ${{ env.VERSION }}

@@ -97,7 +97,7 @@ publish\FileAction.exe
 
 ### Releasing
 
-Push a commit to `main` whose message starts with `Release v1.2.3` (or push a `v1.2.3` tag, or run the **Build** workflow manually with a version). CI builds the installer and zip and publishes them as a GitHub release.
+Push a commit to `main` whose message starts with `Release v1.2.3` (or push a `v1.2.3` tag, or run the **Build** workflow manually with a version). CI builds the installer and zip and publishes them as a GitHub release. Add a repository secret `RELEASE_TOKEN` (a fine-grained personal access token with *Contents: read and write* on this repository) to publish releases under your own account instead of github-actions.
 
 ## Project layout
 
