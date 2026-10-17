@@ -1,0 +1,100 @@
+name: Build
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  core-tests-linux:
+    name: Core tests (Linux, with ffmpeg/pandoc/LibreOffice)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install converters
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg pandoc libreoffice-writer libreoffice-calc libreoffice-impress
+      - name: Test
+        run: dotnet test tests/FileAction.Tests -c Release --logger "console;verbosity=normal"
+
+  windows:
+    name: Windows build, tests and installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Version
+        shell: pwsh
+        run: |
+          $v = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { "1.0.$($env:GITHUB_RUN_NUMBER)" }
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Download ffmpeg and pandoc
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./scripts/fetch-tools.ps1 -Destination tools
+
+      - name: Test (Windows)
+        shell: pwsh
+        run: |
+          $env:PATH = "$PWD\tools;$env:PATH"
+          dotnet test tests/FileAction.Tests -c Release --logger "console;verbosity=normal"
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          dotnet publish src/FileAction.App/FileAction.App.csproj -c Release -r win-x64 --self-contained -p:Version=$env:VERSION -o publish
+          New-Item -ItemType Directory -Force publish/tools | Out-Null
+          Copy-Item tools/* publish/tools/
+          Copy-Item THIRD-PARTY-NOTICES.md publish/
+
+      - name: UI self-test
+        shell: pwsh
+        run: |
+          $out = Join-Path $PWD 'self-test'
+          $p = Start-Process -FilePath "$PWD\publish\FileAction.exe" -ArgumentList '--self-test', "`"$out`"" -Wait -PassThru
+          Get-Content (Join-Path $out 'self-test.txt')
+          if ($p.ExitCode -ne 0) { throw "Self-test failed with exit code $($p.ExitCode)" }
+
+      - name: Installer and zip
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          & $iscc "/DAppVersion=$env:VERSION" installer/FileAction.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
+          Compress-Archive -Path publish/* -DestinationPath "artifacts/FileAction-$env:VERSION-win-x64.zip"
+          Get-ChildItem artifacts | ForEach-Object { "{0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FileAction-${{ env.VERSION }}-windows
+          path: artifacts/*
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-previews
+          path: self-test/*
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*

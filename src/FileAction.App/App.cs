@@ -1,0 +1,196 @@
+using System.IO;
+using System.Windows;
+using System.Windows.Threading;
+using FileAction.App.Actions;
+using FileAction.App.Input;
+using FileAction.App.Jobs;
+using FileAction.App.Shell;
+using FileAction.App.UI;
+using FileAction.App.Wheel;
+using FileAction.Core;
+
+namespace FileAction.App;
+
+public static class Program
+{
+    [STAThread]
+    public static int Main(string[] args)
+    {
+        if (args.Length >= 1 && args[0] == "--self-test")
+            return SelfTest.Run(args.Length >= 2 ? args[1] : "self-test");
+        if (args.Contains("--unregister"))
+        {
+            // Called by the uninstaller.
+            ShellIntegration.SetContextMenu(false);
+            ShellIntegration.SetAutostart(false);
+            return 0;
+        }
+
+        using var instance = SingleInstance.TryAcquire();
+        if (instance is null)
+        {
+            // Already running: hand over the request (or just open the settings).
+            SingleInstance.Forward(args.Length > 0 ? args : ["--settings"]);
+            return 0;
+        }
+        var app = new App(instance, args);
+        return app.Run();
+    }
+}
+
+internal sealed class App : Application
+{
+    private readonly SingleInstance _instance;
+    private readonly string[] _args;
+    private AppSettings _settings = null!;
+    private ToolLocator _tools = null!;
+    private GlobalInput? _input;
+    private WheelController _controller = null!;
+    private TrayIcon? _tray;
+    private HotkeyListener? _hotkey;
+
+    public App(SingleInstance instance, string[] args)
+    {
+        _instance = instance;
+        _args = args;
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        DispatcherUnhandledException += OnUnhandled;
+    }
+
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+
+        _settings = AppSettings.Load();
+        _tools = new ToolLocator();
+        var jobs = new JobRunner(_settings, _tools);
+
+        _input = new GlobalInput(Dispatcher);
+        try
+        {
+            _input.Start();
+        }
+        catch (InvalidOperationException ex)
+        {
+            MessageBox.Show(ex.Message, "FileAction", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        _controller = new WheelController(_settings, _tools, jobs, _input);
+        _tray = new TrayIcon(OpenSettings, () => ShelfWindow.Open([]), ShowHelp, SetPaused, _settings.Paused, () => Shutdown());
+        _hotkey = new HotkeyListener(_controller.OnHotkey);
+        ApplyHotkey();
+        _instance.Listen(Dispatcher, HandleArgs);
+
+        ShellIntegration.Refresh();
+        if (!_settings.FirstRunDone)
+        {
+            _settings.FirstRunDone = true;
+            _settings.Save();
+            TryIntegrateOnFirstRun();
+            OpenSettings();
+        }
+        else if (!_args.Contains("--background"))
+        {
+            _tray.Show("FileAction běží", "Chyťte soubor, během tažení ťukněte na Shift a pusťte ho na formát.", false);
+        }
+        HandleArgs(_args);
+    }
+
+    private static void TryIntegrateOnFirstRun()
+    {
+        try
+        {
+            ShellIntegration.SetContextMenu(true);
+            ShellIntegration.SetAutostart(true);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        {
+        }
+    }
+
+    private void HandleArgs(string[] args)
+    {
+        if (args.Contains("--settings"))
+            OpenSettings();
+        var wheelIndex = Array.IndexOf(args, "--wheel");
+        if (wheelIndex >= 0)
+            _controller.QueuePaths(args.Skip(wheelIndex + 1).Where(a => !a.StartsWith("--", StringComparison.Ordinal)));
+    }
+
+    private void OpenSettings() => SettingsWindow.ShowSingle(_settings, _tools, OnSettingsChanged);
+
+    private void OnSettingsChanged()
+    {
+        ApplyHotkey();
+        if (_tray is not null)
+            _tray.Paused = _settings.Paused;
+    }
+
+    private void ApplyHotkey()
+    {
+        if (_hotkey is not null && !_hotkey.Register(_settings.Hotkey))
+        {
+            Notifications.Show("Zkratka je obsazená",
+                $"{AppSettings.HotkeyName(_settings.Hotkey)} už používá jiná aplikace. Zvolte jinou v nastavení.", error: true);
+        }
+    }
+
+    private void SetPaused(bool paused)
+    {
+        _settings.Paused = paused;
+        _settings.Save();
+    }
+
+    private void ShowHelp()
+    {
+        var convert = AppSettings.KeyName(_settings.ConvertKey);
+        var tools = AppSettings.KeyName(_settings.ToolsKey);
+        var actions = AppSettings.KeyName(_settings.ActionsKey);
+        MessageBox.Show(
+            $"""
+            1. Chyťte soubor myší (v Průzkumníku, na ploše, kdekoli).
+            2. Během tažení ťukněte na klávesu:
+                 {convert} – převést na jiný formát
+                 {tools} – nástroje (komprimovat, zmenšit, oříznout, spojit…)
+                 {actions} – akce (kopírovat, přesunout, cesta, terminál, plovoucí panel, sdílet)
+            3. Pusťte soubor na výseč kola. Do středu = zrušit.
+
+            Kolo zůstane otevřené, dokud soubor nepustíte; klávesu můžete pustit a další klávesou přepnout kolo.
+
+            Bez myši: vyberte soubory v Průzkumníku a stiskněte {AppSettings.HotkeyName(_settings.Hotkey)}.
+            Šipky vyberou výseč, Enter potvrdí, Tab přepne kolo, Esc zavře.
+            Také přes pravé tlačítko → „FileAction…“.
+
+            Výsledek se uloží vedle původního souboru, originál zůstane beze změny.
+            """,
+            "Jak FileAction funguje", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        Log(e.Exception);
+        e.Handled = true;
+        Notifications.Show("FileAction – chyba", e.Exception.Message, error: true);
+    }
+
+    public static void Log(Exception ex)
+    {
+        try
+        {
+            Directory.CreateDirectory(AppSettings.Folder);
+            File.AppendAllText(Path.Combine(AppSettings.Folder, "log.txt"), $"[{DateTime.Now:s}] {ex}{Environment.NewLine}");
+        }
+        catch (IOException)
+        {
+        }
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        _hotkey?.Dispose();
+        _input?.Dispose();
+        _tray?.Dispose();
+        _settings.Save();
+        base.OnExit(e);
+    }
+}
