@@ -50,6 +50,9 @@ internal sealed class SettingsWindow : Window
         _open.Activate();
     }
 
+    /// <summary>Redraws the open settings window after the app changed a setting itself.</summary>
+    public static void RefreshIfOpen() => _open?.Rebuild();
+
     private void Save()
     {
         _settings.Save();

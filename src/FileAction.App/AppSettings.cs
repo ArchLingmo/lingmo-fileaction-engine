@@ -13,6 +13,7 @@ public enum HotkeyPreset
     CtrlAltSpace,
     CtrlShiftSpace,
     CtrlAltF,
+    CtrlAltW,
 }
 
 /// <summary>User preferences, stored as JSON in %APPDATA%\FileAction\settings.json.</summary>
@@ -116,6 +117,7 @@ public sealed class AppSettings
         HotkeyPreset.CtrlAltSpace => T("Ctrl + Alt + Mezerník", "Ctrl + Alt + Space"),
         HotkeyPreset.CtrlShiftSpace => T("Ctrl + Shift + Mezerník", "Ctrl + Shift + Space"),
         HotkeyPreset.CtrlAltF => "Ctrl + Alt + F",
+        HotkeyPreset.CtrlAltW => "Ctrl + Alt + W",
         _ => T("Vypnuto", "Off"),
     };
 }

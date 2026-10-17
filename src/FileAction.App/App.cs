@@ -49,6 +49,7 @@ internal sealed class App : Application
     private WheelController _controller = null!;
     private TrayIcon? _tray;
     private HotkeyListener? _hotkey;
+    private HotkeyPreset? _activeHotkey;
 
     public App(SingleInstance instance, string[] args)
     {
@@ -150,13 +151,41 @@ internal sealed class App : Application
             _tray.Paused = _settings.Paused;
     }
 
+    /// <summary>
+    /// Registers the chosen shortcut. If another app already owns it, switches to the first free preset
+    /// and says so once, instead of leaving the user without a shortcut.
+    /// </summary>
     private void ApplyHotkey()
     {
-        if (_hotkey is not null && !_hotkey.Register(_settings.Hotkey))
+        var wanted = _settings.Hotkey;
+        if (_hotkey is null || _activeHotkey == wanted)
+            return;
+        if (_hotkey.Register(wanted))
         {
-            Notifications.Show(T("Zkratka je obsazená", "Shortcut is taken"),
-                T($"{AppSettings.HotkeyName(_settings.Hotkey)} už používá jiná aplikace. Zvolte jinou v nastavení.", $"{AppSettings.HotkeyName(_settings.Hotkey)} is used by another app. Pick another one in Settings."), error: true);
+            _activeHotkey = wanted;
+            return;
         }
+
+        var taken = AppSettings.HotkeyName(wanted);
+        foreach (var preset in Enum.GetValues<HotkeyPreset>().Where(p => p != HotkeyPreset.None && p != wanted))
+        {
+            if (!_hotkey.Register(preset))
+                continue;
+            _activeHotkey = preset;
+            _settings.Hotkey = preset;
+            _settings.Save();
+            SettingsWindow.RefreshIfOpen();
+            var now = AppSettings.HotkeyName(preset);
+            Notifications.Show(T("Zkratka změněna", "Shortcut changed"),
+                T($"{taken} už používá jiná aplikace, FileAction teď používá {now}. Změnit ji můžete v nastavení.",
+                  $"{taken} is used by another app, so FileAction now uses {now}. You can change it in Settings."));
+            return;
+        }
+
+        _activeHotkey = HotkeyPreset.None;
+        Notifications.Show(T("Zkratka je obsazená", "Shortcut is taken"),
+            T("Všechny nabízené zkratky už používají jiné aplikace. Kolo otevřete tažením nebo z nabídky u hodin.",
+              "All offered shortcuts are used by other apps. Open the wheel by dragging or from the tray menu."), error: true);
     }
 
     private void SetPaused(bool paused)

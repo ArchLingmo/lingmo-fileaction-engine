@@ -27,6 +27,7 @@ internal sealed class HotkeyListener : IDisposable
             HotkeyPreset.CtrlAltSpace => (Win32.MOD_CONTROL | Win32.MOD_ALT, 0x20u),
             HotkeyPreset.CtrlShiftSpace => (Win32.MOD_CONTROL | Win32.MOD_SHIFT, 0x20u),
             HotkeyPreset.CtrlAltF => (Win32.MOD_CONTROL | Win32.MOD_ALT, 0x46u),
+            HotkeyPreset.CtrlAltW => (Win32.MOD_CONTROL | Win32.MOD_ALT, 0x57u),
             _ => (0u, 0u),
         };
         if (vk == 0)
