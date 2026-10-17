@@ -439,15 +439,28 @@ internal sealed class WheelWindow : Window
             _slices.Add(path);
             _canvas.Children.Add(path);
         }
+        // Labels sit a little outside the middle of the ring, where slices are wider,
+        // and shrink to the slice's width instead of spilling into the neighbours.
+        var labelRadius = InnerRadius + (OuterRadius - InnerRadius) * 0.55;
+        var labelWidth = n <= 2 ? 120 : Math.Clamp(2 * labelRadius * Math.Sin(step / 2 * Math.PI / 180) * 0.86, 48, 110);
         for (var i = 0; i < n; i++)
         {
-            var label = SliceLabel(_ops[i], i);
-            var mid = n == 1 ? new Point(Size / 2, Size / 2 - (InnerRadius + OuterRadius) / 2) : Polar((InnerRadius + OuterRadius) / 2, i * step);
-            label.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
-            Canvas.SetLeft(label, mid.X - label.DesiredSize.Width / 2);
-            Canvas.SetTop(label, mid.Y - label.DesiredSize.Height / 2);
+            var label = SliceLabel(_ops[i]);
+            var fit = new Viewbox
+            {
+                Child = label,
+                Stretch = Stretch.Uniform,
+                StretchDirection = StretchDirection.DownOnly,
+                MaxWidth = labelWidth,
+                MaxHeight = (OuterRadius - InnerRadius) * 0.8,
+                IsHitTestVisible = false,
+            };
+            var mid = n == 1 ? new Point(Size / 2, Size / 2 - labelRadius) : Polar(labelRadius, i * step);
+            fit.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+            Canvas.SetLeft(fit, mid.X - fit.DesiredSize.Width / 2);
+            Canvas.SetTop(fit, mid.Y - fit.DesiredSize.Height / 2);
             _labels.Add(label);
-            _canvas.Children.Add(label);
+            _canvas.Children.Add(fit);
         }
 
         var hub = new Ellipse
@@ -470,9 +483,9 @@ internal sealed class WheelWindow : Window
         _canvas.Children.Add(_hubContent);
     }
 
-    private StackPanel SliceLabel(Operation op, int index)
+    private static StackPanel SliceLabel(Operation op)
     {
-        var panel = new StackPanel { Width = 92, IsHitTestVisible = false };
+        var panel = new StackPanel { MaxWidth = 96, IsHitTestVisible = false };
         var isFormat = op.Wheel == WheelKind.Convert && op.Label.Length <= 6 && op.Label.ToUpperInvariant() == op.Label;
         if (!isFormat)
         {
@@ -508,8 +521,6 @@ internal sealed class WheelWindow : Window
                 HorizontalAlignment = HorizontalAlignment.Center,
             });
         }
-        if (index < 9 && Mode == WheelMode.Click)
-            panel.ToolTip = $"{index + 1}";
         return panel;
     }
 
