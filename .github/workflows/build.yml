@@ -91,7 +91,7 @@ jobs:
         if: always()
         with:
           name: ui-previews
-          path: self-test/*
+          path: self-test
 
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')

@@ -2,6 +2,7 @@ using FileAction.App.Actions;
 using FileAction.App.Shell;
 using FileAction.App.UI;
 using FileAction.Core;
+using static FileAction.Core.Loc;
 
 namespace FileAction.App.Jobs;
 
@@ -36,8 +37,8 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
 
         _window ??= new JobsWindow();
         using var cts = new CancellationTokenSource();
-        var title = op.Wheel == WheelKind.Convert && op.Label.ToUpperInvariant() == op.Label ? $"Převod na {op.Label}" : op.Label;
-        var detail = items.Count == 1 ? items[0].Name : $"{items.Count} položek";
+        var title = op.Wheel == WheelKind.Convert && op.Label.ToUpperInvariant() == op.Label ? T($"Převod na {op.Label}", $"Convert to {op.Label}") : op.Label;
+        var detail = items.Count == 1 ? items[0].Name : Items(items.Count);
         var card = _window.Add(title, detail, () =>
         {
             try
@@ -78,9 +79,9 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
     private static string Friendly(Exception ex) => ex switch
     {
         ConversionException => ex.Message,
-        UnauthorizedAccessException => "Do cílové složky nelze zapisovat. Zkuste v nastavení zvolit jinou výstupní složku.",
-        System.IO.IOException => $"Chyba souboru: {ex.Message}",
-        ImageMagick.MagickException => $"Obrázek se nepodařilo zpracovat: {ex.Message}",
+        UnauthorizedAccessException => T("Do cílové složky nelze zapisovat. Zkuste v nastavení zvolit jinou výstupní složku.", "Cannot write to the target folder. Choose another output folder in Settings."),
+        System.IO.IOException => T($"Chyba souboru: {ex.Message}", $"File error: {ex.Message}"),
+        ImageMagick.MagickException => T($"Obrázek se nepodařilo zpracovat: {ex.Message}", $"Could not process the image: {ex.Message}"),
         _ => $"{ex.GetType().Name}: {ex.Message}",
     };
 }

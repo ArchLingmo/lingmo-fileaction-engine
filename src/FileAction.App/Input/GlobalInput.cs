@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using FileAction.App.Native;
+using static FileAction.Core.Loc;
 
 namespace FileAction.App.Input;
 
@@ -86,7 +87,7 @@ internal sealed class GlobalInput : IDisposable
         _thread.Start();
         ready.Wait();
         if (_keyboardHook == IntPtr.Zero || _mouseHook == IntPtr.Zero)
-            throw new InvalidOperationException("Nepodařilo se zaregistrovat globální sledování klávesnice a myši.");
+            throw new InvalidOperationException(T("Nepodařilo se zaregistrovat globální sledování klávesnice a myši.", "Could not install the global keyboard and mouse hooks."));
     }
 
     public void Dispose()

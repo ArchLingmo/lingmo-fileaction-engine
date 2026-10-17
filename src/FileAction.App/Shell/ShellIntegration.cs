@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using static FileAction.Core.Loc;
 
 namespace FileAction.App.Shell;
 
@@ -9,7 +10,7 @@ internal static class ShellIntegration
     private const string ValueName = "FileAction";
     private static readonly string[] MenuRoots = [@"Software\Classes\*\shell\FileAction", @"Software\Classes\Directory\shell\FileAction"];
 
-    private static string Exe => Environment.ProcessPath ?? throw new InvalidOperationException("Neznámá cesta k aplikaci.");
+    private static string Exe => Environment.ProcessPath ?? throw new InvalidOperationException(T("Neznámá cesta k aplikaci.", "Unknown application path."));
 
     public static bool IsAutostartEnabled
     {

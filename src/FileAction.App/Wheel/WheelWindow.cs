@@ -9,6 +9,7 @@ using System.Windows.Threading;
 using FileAction.App.Native;
 using FileAction.App.UI;
 using FileAction.Core;
+using static FileAction.Core.Loc;
 
 namespace FileAction.App.Wheel;
 
@@ -595,18 +596,15 @@ internal sealed class WheelWindow : Window
         }
         _title.Text = AppSettings.WheelName(_wheel);
         if (_items.Count == 0)
-            _detail.Text = "Přetáhněte sem soubor";
+            _detail.Text = T("Přetáhněte sem soubor", "Drag a file here");
         else if (_ops.Count == 0)
-            _detail.Text = "Pro tento výběr nic není";
+            _detail.Text = T("Pro tento výběr nic není", "Nothing for this selection");
         else
             _detail.Text = DescribeItems();
     }
 
     private string DescribeItems()
     {
-        if (_items.Count == 1)
-            return _items[0].Name;
-        var n = _items.Count;
-        return n is >= 2 and <= 4 ? $"{n} položky" : $"{n} položek";
+        return _items.Count == 1 ? _items[0].Name : Items(_items.Count);
     }
 }

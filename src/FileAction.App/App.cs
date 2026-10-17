@@ -8,6 +8,7 @@ using FileAction.App.Shell;
 using FileAction.App.UI;
 using FileAction.App.Wheel;
 using FileAction.Core;
+using static FileAction.Core.Loc;
 
 namespace FileAction.App;
 
@@ -62,6 +63,7 @@ internal sealed class App : Application
         base.OnStartup(e);
 
         _settings = AppSettings.Load();
+        Loc.Current = _settings.Language ?? Loc.Detect();
         _tools = new ToolLocator();
         var jobs = new JobRunner(_settings, _tools);
 
@@ -76,7 +78,7 @@ internal sealed class App : Application
         }
 
         _controller = new WheelController(_settings, _tools, jobs, _input);
-        _tray = new TrayIcon(OpenSettings, () => ShelfWindow.Open([]), ShowHelp, SetPaused, _settings.Paused, () => Shutdown());
+        _tray = CreateTray();
         _hotkey = new HotkeyListener(_controller.OnHotkey);
         ApplyHotkey();
         _instance.Listen(Dispatcher, HandleArgs);
@@ -91,7 +93,7 @@ internal sealed class App : Application
         }
         else if (!_args.Contains("--background"))
         {
-            _tray.Show("FileAction běží", "Chyťte soubor, během tažení ťukněte na Shift a pusťte ho na formát.", false);
+            _tray.Show(T("FileAction běží", "FileAction is running"), T("Chyťte soubor, během tažení ťukněte na Shift a pusťte ho na formát.", "Grab a file, tap Shift while dragging and drop it on a format."), false);
         }
         HandleArgs(_args);
     }
@@ -108,6 +110,9 @@ internal sealed class App : Application
         }
     }
 
+    private TrayIcon CreateTray() =>
+        new(OpenSettings, () => ShelfWindow.Open([]), ShowHelp, SetPaused, _settings.Paused, () => Shutdown());
+
     private void HandleArgs(string[] args)
     {
         if (args.Contains("--settings"))
@@ -121,6 +126,14 @@ internal sealed class App : Application
 
     private void OnSettingsChanged()
     {
+        var language = _settings.Language ?? Loc.Detect();
+        if (language != Loc.Current)
+        {
+            Loc.Current = language;
+            _controller.Relocalize();
+            _tray?.Dispose();
+            _tray = CreateTray();
+        }
         ApplyHotkey();
         if (_tray is not null)
             _tray.Paused = _settings.Paused;
@@ -130,8 +143,8 @@ internal sealed class App : Application
     {
         if (_hotkey is not null && !_hotkey.Register(_settings.Hotkey))
         {
-            Notifications.Show("Zkratka je obsazená",
-                $"{AppSettings.HotkeyName(_settings.Hotkey)} už používá jiná aplikace. Zvolte jinou v nastavení.", error: true);
+            Notifications.Show(T("Zkratka je obsazená", "Shortcut is taken"),
+                T($"{AppSettings.HotkeyName(_settings.Hotkey)} už používá jiná aplikace. Zvolte jinou v nastavení.", $"{AppSettings.HotkeyName(_settings.Hotkey)} is used by another app. Pick another one in Settings."), error: true);
         }
     }
 
@@ -146,7 +159,8 @@ internal sealed class App : Application
         var convert = AppSettings.KeyName(_settings.ConvertKey);
         var tools = AppSettings.KeyName(_settings.ToolsKey);
         var actions = AppSettings.KeyName(_settings.ActionsKey);
-        MessageBox.Show(
+        var hotkey = AppSettings.HotkeyName(_settings.Hotkey);
+        var text = T(
             $"""
             1. Chyťte soubor myší (v Průzkumníku, na ploše, kdekoli).
             2. Během tažení ťukněte na klávesu:
@@ -157,20 +171,36 @@ internal sealed class App : Application
 
             Kolo zůstane otevřené, dokud soubor nepustíte; klávesu můžete pustit a další klávesou přepnout kolo.
 
-            Bez myši: vyberte soubory v Průzkumníku a stiskněte {AppSettings.HotkeyName(_settings.Hotkey)}.
+            Bez myši: vyberte soubory v Průzkumníku a stiskněte {hotkey}.
             Šipky vyberou výseč, Enter potvrdí, Tab přepne kolo, Esc zavře.
             Také přes pravé tlačítko → „FileAction…“.
 
             Výsledek se uloží vedle původního souboru, originál zůstane beze změny.
             """,
-            "Jak FileAction funguje", MessageBoxButton.OK, MessageBoxImage.Information);
+            $"""
+            1. Grab a file with the mouse (in File Explorer, on the desktop, anywhere).
+            2. While dragging, tap a key:
+                 {convert} – convert to another format
+                 {tools} – tools (compress, shrink, trim, merge…)
+                 {actions} – actions (copy, move, path, terminal, floating shelf, share)
+            3. Drop the file on a slice of the wheel. Drop it in the middle to cancel.
+
+            The wheel stays open until you drop; you can release the key and tap another one to switch wheels.
+
+            Without the mouse: select files in File Explorer and press {hotkey}.
+            Arrows pick a slice, Enter runs it, Tab switches wheels, Esc closes.
+            Also via right-click → “FileAction…”.
+
+            The result is saved next to the original file; the original stays untouched.
+            """);
+        MessageBox.Show(text, T("Jak FileAction funguje", "How FileAction works"), MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         Log(e.Exception);
         e.Handled = true;
-        Notifications.Show("FileAction – chyba", e.Exception.Message, error: true);
+        Notifications.Show(T("FileAction – chyba", "FileAction – error"), e.Exception.Message, error: true);
     }
 
     public static void Log(Exception ex)

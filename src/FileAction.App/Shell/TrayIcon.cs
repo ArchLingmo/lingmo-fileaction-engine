@@ -1,5 +1,6 @@
 using System.Windows;
 using Forms = System.Windows.Forms;
+using static FileAction.Core.Loc;
 
 namespace FileAction.App.Shell;
 
@@ -13,14 +14,14 @@ internal sealed class TrayIcon : IDisposable
     {
         var stream = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Assets/FileAction.ico"))!.Stream;
         var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("Nastavení…", null, (_, _) => openSettings());
-        menu.Items.Add("Prázdný plovoucí panel", null, (_, _) => openShelf());
-        menu.Items.Add("Jak to funguje", null, (_, _) => showHelp());
-        _pause = new Forms.ToolStripMenuItem("Pozastavit gesta") { Checked = paused, CheckOnClick = true };
+        menu.Items.Add(T("Nastavení…", "Settings…"), null, (_, _) => openSettings());
+        menu.Items.Add(T("Prázdný plovoucí panel", "Empty floating shelf"), null, (_, _) => openShelf());
+        menu.Items.Add(T("Jak to funguje", "How it works"), null, (_, _) => showHelp());
+        _pause = new Forms.ToolStripMenuItem(T("Pozastavit gesta", "Pause gestures")) { Checked = paused, CheckOnClick = true };
         _pause.CheckedChanged += (_, _) => setPaused(_pause.Checked);
         menu.Items.Add(_pause);
         menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("Ukončit", null, (_, _) => exit());
+        menu.Items.Add(T("Ukončit", "Exit"), null, (_, _) => exit());
 
         _icon = new Forms.NotifyIcon
         {

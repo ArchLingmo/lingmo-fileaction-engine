@@ -25,50 +25,11 @@ internal static class SelfTest
         {
             Directory.CreateDirectory(outDir);
             _ = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-            var settings = new AppSettings();
-            var tools = new ToolLocator();
-            var core = Catalog.Build();
-            var actions = FileActions.Build(settings, () => { });
-            IReadOnlyList<Operation> Source(WheelKind wheel, IReadOnlyList<FileItem> items) =>
-                Catalog.For(wheel == WheelKind.Actions ? actions : core, wheel, items, tools);
-
-            var samples = new (string Name, WheelMode Mode, WheelKind Wheel, string[] Files, int Highlight)[]
+            foreach (var language in new[] { Language.English, Language.Czech })
             {
-                ("wheel-image-convert", WheelMode.Drag, WheelKind.Convert, [@"C:\Fotky\dovolená.jpg"], 1),
-                ("wheel-image-tools", WheelMode.Click, WheelKind.Tools, [@"C:\Fotky\dovolená.jpg"], 0),
-                ("wheel-video-convert", WheelMode.Drag, WheelKind.Convert, [@"C:\Videa\klip.mov"], 0),
-                ("wheel-video-tools", WheelMode.Drag, WheelKind.Tools, [@"C:\Videa\klip.mov"], 3),
-                ("wheel-pdf-convert", WheelMode.Drag, WheelKind.Convert, [@"C:\Dokumenty\smlouva.pdf"], 2),
-                ("wheel-pdf-tools", WheelMode.Click, WheelKind.Tools, [@"C:\a.pdf", @"C:\b.pdf"], 0),
-                ("wheel-sheet-convert", WheelMode.Drag, WheelKind.Convert, [@"C:\Data\tabulka.xlsx"], -1),
-                ("wheel-actions", WheelMode.Drag, WheelKind.Actions, [@"C:\Fotky\dovolená.jpg"], 4),
-                ("wheel-waiting-for-drop", WheelMode.Drag, WheelKind.Convert, [], -1),
-            };
-            foreach (var s in samples)
-            {
-                var window = new WheelWindow(s.Mode, s.Wheel, s.Files.Select(f => new FileItem(f)).ToList(), settings, Source, (_, _) => { });
-                window.RenderPreview(Path.Combine(outDir, s.Name + ".png"), s.Highlight);
-                window.Close();
-                log.Add($"ok {s.Name}");
+                Loc.Current = language;
+                RenderAll(Path.Combine(outDir, language == Language.English ? "en" : "cs"), language == Language.English, log);
             }
-
-            var settingsWindow = new SettingsWindow(settings, tools, () => { });
-            SaveWindow(settingsWindow, Path.Combine(outDir, "settings.png"), 560);
-            log.Add("ok settings");
-
-            var jobs = new JobsWindow();
-            var running = jobs.Add("Převod na MP4", "klip.mov", () => { });
-            running.Report(0.42);
-            jobs.Add("Komprimovat", "dovolená.jpg", () => { }).Complete([@"C:\Fotky\dovolená (komprimováno).jpg"], null);
-            jobs.Add("Převod na DOCX", "smlouva.pdf", () => { }).Fail("Chybí nástroj Pandoc. Nainstalujte ho příkazem: winget install JohnMacFarlane.Pandoc");
-            SaveWindow(jobs, Path.Combine(outDir, "jobs.png"), 360, dark: true);
-            jobs.Close();
-            log.Add("ok jobs");
-
-            var trim = core.Single(o => o.Id == "video.trim");
-            var dialog = new ParameterDialog(trim, [new FileItem(@"C:\Videa\klip.mov")]);
-            SaveWindow(dialog, Path.Combine(outDir, "trim-dialog.png"), 360);
-            log.Add("ok parameter dialog");
 
             File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
             return 0;
@@ -86,6 +47,56 @@ internal static class SelfTest
             }
             return 1;
         }
+    }
+
+    private static void RenderAll(string outDir, bool english, List<string> log)
+    {
+        Directory.CreateDirectory(outDir);
+        string N(string cs, string en) => english ? en : cs;
+        var settings = new AppSettings();
+        var tools = new ToolLocator();
+        var core = Catalog.Build();
+        var actions = FileActions.Build(settings, () => { });
+        IReadOnlyList<Operation> Source(WheelKind wheel, IReadOnlyList<FileItem> items) =>
+            Catalog.For(wheel == WheelKind.Actions ? actions : core, wheel, items, tools);
+
+        var samples = new (string Name, WheelMode Mode, WheelKind Wheel, string[] Files, int Highlight)[]
+        {
+            ("wheel-image-convert", WheelMode.Drag, WheelKind.Convert, [N(@"C:\Fotky\dovolená.jpg", @"C:\Photos\vacation.jpg")], 1),
+            ("wheel-image-tools", WheelMode.Click, WheelKind.Tools, [N(@"C:\Fotky\dovolená.jpg", @"C:\Photos\vacation.jpg")], 0),
+            ("wheel-video-convert", WheelMode.Drag, WheelKind.Convert, [N(@"C:\Videa\klip.mov", @"C:\Videos\clip.mov")], 0),
+            ("wheel-video-tools", WheelMode.Drag, WheelKind.Tools, [N(@"C:\Videa\klip.mov", @"C:\Videos\clip.mov")], 3),
+            ("wheel-pdf-convert", WheelMode.Drag, WheelKind.Convert, [N(@"C:\Dokumenty\smlouva.pdf", @"C:\Documents\contract.pdf")], 2),
+            ("wheel-pdf-tools", WheelMode.Click, WheelKind.Tools, [@"C:\a.pdf", @"C:\b.pdf"], 0),
+            ("wheel-sheet-convert", WheelMode.Drag, WheelKind.Convert, [N(@"C:\Data\tabulka.xlsx", @"C:\Data\sales.xlsx")], -1),
+            ("wheel-actions", WheelMode.Drag, WheelKind.Actions, [N(@"C:\Fotky\dovolená.jpg", @"C:\Photos\vacation.jpg")], 4),
+            ("wheel-waiting-for-drop", WheelMode.Drag, WheelKind.Convert, [], -1),
+        };
+        foreach (var s in samples)
+        {
+            var window = new WheelWindow(s.Mode, s.Wheel, s.Files.Select(f => new FileItem(f)).ToList(), settings, Source, (_, _) => { });
+            window.RenderPreview(Path.Combine(outDir, s.Name + ".png"), s.Highlight);
+            window.Close();
+            log.Add($"ok {Path.GetFileName(outDir)}/{s.Name}");
+        }
+
+        var settingsWindow = new SettingsWindow(settings, tools, () => { });
+        SaveWindow(settingsWindow, Path.Combine(outDir, "settings.png"), 560);
+        log.Add($"ok {Path.GetFileName(outDir)}/settings");
+
+        var jobs = new JobsWindow();
+        var running = jobs.Add(N("Převod na MP4", "Convert to MP4"), N("klip.mov", "clip.mov"), () => { });
+        running.Report(0.42);
+        jobs.Add(N("Komprimovat", "Compress"), N("dovolená.jpg", "vacation.jpg"), () => { }).Complete([N(@"C:\Fotky\dovolená (komprimováno).jpg", @"C:\Photos\vacation (compressed).jpg")], null);
+        jobs.Add(N("Převod na DOCX", "Convert to DOCX"), N("smlouva.pdf", "contract.pdf"), () => { }).Fail(N("Chybí nástroj Pandoc. Nainstalujte ho příkazem: ", "Pandoc is missing. Install it with: ") + "winget install JohnMacFarlane.Pandoc");
+        SaveWindow(jobs, Path.Combine(outDir, "jobs.png"), 360, dark: true);
+        jobs.Close();
+        log.Add($"ok {Path.GetFileName(outDir)}/jobs");
+
+        var trim = core.Single(o => o.Id == "video.trim");
+        var dialog = new ParameterDialog(trim, [new FileItem(N(@"C:\Videa\klip.mov", @"C:\Videos\clip.mov"))]);
+        SaveWindow(dialog, Path.Combine(outDir, "trim-dialog.png"), 360);
+        log.Add($"ok {Path.GetFileName(outDir)}/parameter dialog");
     }
 
     private static void SaveWindow(Window window, string file, double width, bool dark = false)

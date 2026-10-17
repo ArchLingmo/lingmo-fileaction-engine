@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using static FileAction.Core.Loc;
 
 namespace FileAction.Core;
 
@@ -65,7 +66,7 @@ public static class ProcessRunner
         }
         catch (Exception ex)
         {
-            throw new ConversionException($"Nelze spustit {Path.GetFileName(exe)}: {ex.Message}", ex);
+            throw new ConversionException(T($"Nelze spustit {Path.GetFileName(exe)}: {ex.Message}", $"Cannot start {Path.GetFileName(exe)}: {ex.Message}"), ex);
         }
         process.StandardInput.Close();
         process.BeginOutputReadLine();
@@ -93,7 +94,8 @@ public static class ProcessRunner
             lock (stderrTail)
                 tail = string.Join(Environment.NewLine, stderrTail.Where(l => !string.IsNullOrWhiteSpace(l)).TakeLast(5));
             throw new ConversionException(
-                $"{Path.GetFileNameWithoutExtension(exe)} skončil s chybou {process.ExitCode}.{(tail.Length > 0 ? Environment.NewLine + tail : "")}");
+                T($"{Path.GetFileNameWithoutExtension(exe)} skončil s chybou {process.ExitCode}.", $"{Path.GetFileNameWithoutExtension(exe)} failed with exit code {process.ExitCode}.")
+                + (tail.Length > 0 ? Environment.NewLine + tail : ""));
         }
         lock (stdout)
             return stdout.ToString();

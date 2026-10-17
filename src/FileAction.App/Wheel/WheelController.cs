@@ -7,6 +7,7 @@ using FileAction.App.Native;
 using FileAction.App.Shell;
 using FileAction.Core;
 using FileAction.Core.Operations;
+using static FileAction.Core.Loc;
 
 namespace FileAction.App.Wheel;
 
@@ -17,8 +18,8 @@ internal sealed class WheelController
     private readonly ToolLocator _tools;
     private readonly JobRunner _jobs;
     private readonly GlobalInput _input;
-    private readonly IReadOnlyList<Operation> _coreOperations = Catalog.Build();
-    private readonly IReadOnlyList<Operation> _actions;
+    private IReadOnlyList<Operation> _coreOperations = Catalog.Build();
+    private IReadOnlyList<Operation> _actions;
     private readonly List<string> _pendingPaths = [];
     private readonly DispatcherTimer _argsTimer;
     private WheelWindow? _wheel;
@@ -56,6 +57,14 @@ internal sealed class WheelController
         };
     }
 
+    /// <summary>Rebuilds the wheels after the UI language changed (labels are fixed when an operation is created).</summary>
+    public void Relocalize()
+    {
+        _wheel?.Finish();
+        _coreOperations = Catalog.Build();
+        _actions = FileActions.Build(_settings, _settings.Save);
+    }
+
     private IReadOnlyList<Operation> Operations(WheelKind wheel, IReadOnlyList<FileItem> items) =>
         Catalog.For(wheel == WheelKind.Actions ? _actions : _coreOperations, wheel, items, _tools);
 
@@ -77,8 +86,8 @@ internal sealed class WheelController
         var paths = ExplorerSelection.Get(Win32.GetForegroundWindow());
         if (paths.Count == 0)
         {
-            Notifications.Show("Nic není vybráno",
-                "Vyberte soubory v Průzkumníku (nebo je zkopírujte přes Ctrl+C) a stiskněte zkratku znovu.");
+            Notifications.Show(T("Nic není vybráno", "Nothing selected"),
+                T("Vyberte soubory v Průzkumníku (nebo je zkopírujte přes Ctrl+C) a stiskněte zkratku znovu.", "Select files in File Explorer (or copy them with Ctrl+C) and press the shortcut again."));
             return;
         }
         OpenFor(paths, ExplorerSelection.CursorOrCenter());

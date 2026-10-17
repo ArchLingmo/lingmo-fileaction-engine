@@ -1,4 +1,5 @@
 using ImageMagick;
+using static FileAction.Core.Loc;
 
 namespace FileAction.Core.Backends;
 
@@ -33,7 +34,7 @@ public static class ImageBackend
         "gif" => MagickFormat.Gif,
         "ico" => MagickFormat.Ico,
         "pdf" => MagickFormat.Pdf,
-        _ => throw new ConversionException($"Nepodporovaný obrázkový formát: {format}"),
+        _ => throw new ConversionException(T($"Nepodporovaný obrázkový formát: {format}", $"Unsupported image format: {format}")),
     };
 
     private static void PrepareFor(MagickImage image, string format, int quality)

@@ -5,6 +5,7 @@ using FileAction.App.Shell;
 using FileAction.App.UI;
 using FileAction.Core;
 using Microsoft.VisualBasic.FileIO;
+using static FileAction.Core.Loc;
 
 namespace FileAction.App.Actions;
 
@@ -13,16 +14,16 @@ internal static class FileActions
 {
     public static IReadOnlyList<Operation> Build(AppSettings settings, Action save) =>
     [
-        new AppAction("action.copy", "Kopírovat", Glyphs.Copy, items => CopyOrMoveAsync(items, move: false, settings, save), "do složky…"),
-        new AppAction("action.move", "Přesunout", Glyphs.Move, items => CopyOrMoveAsync(items, move: true, settings, save), "do složky…"),
-        new AppAction("action.path", "Kopírovat cestu", Glyphs.Link, CopyPathAsync),
-        new AppAction("action.terminal", "Terminál", Glyphs.Terminal, OpenTerminalAsync, "otevřít zde"),
-        new AppAction("action.float", "Plovoucí panel", Glyphs.Pin, items =>
+        new AppAction("action.copy", T("Kopírovat", "Copy"), Glyphs.Copy, items => CopyOrMoveAsync(items, move: false, settings, save), T("do složky…", "to folder…")),
+        new AppAction("action.move", T("Přesunout", "Move"), Glyphs.Move, items => CopyOrMoveAsync(items, move: true, settings, save), T("do složky…", "to folder…")),
+        new AppAction("action.path", T("Kopírovat cestu", "Copy path"), Glyphs.Link, CopyPathAsync),
+        new AppAction("action.terminal", T("Terminál", "Terminal"), Glyphs.Terminal, OpenTerminalAsync, T("otevřít zde", "open here")),
+        new AppAction("action.float", T("Plovoucí panel", "Float"), Glyphs.Pin, items =>
         {
             ShelfWindow.Open(items);
             return Task.CompletedTask;
-        }, "odložit na později"),
-        new AppAction("action.share", "Sdílet", Glyphs.Share, ShareHelper.ShareAsync, "Windows",
+        }, T("odložit na později", "keep for later")),
+        new AppAction("action.share", T("Sdílet", "Share"), Glyphs.Share, ShareHelper.ShareAsync, "Windows",
             items => items.Count > 0 && items.All(i => !i.IsDirectory)),
     ];
 
@@ -30,7 +31,7 @@ internal static class FileActions
     {
         var dialog = new Microsoft.Win32.OpenFolderDialog
         {
-            Title = move ? "Kam přesunout?" : "Kam zkopírovat?",
+            Title = move ? T("Kam přesunout?", "Move to…") : T("Kam zkopírovat?", "Copy to…"),
             InitialDirectory = (move ? settings.LastMoveFolder : settings.LastCopyFolder)
                 ?? Path.GetDirectoryName(items[0].Path.TrimEnd('\\', '/')) ?? "",
         };
@@ -117,7 +118,7 @@ internal static class FileActions
                 Thread.Sleep(50);
             }
         }
-        Notifications.Show("Cesta zkopírována", items.Count == 1 ? items[0].Path : $"{items.Count} cest");
+        Notifications.Show(T("Cesta zkopírována", "Path copied"), items.Count == 1 ? items[0].Path : Items(items.Count));
         return Task.CompletedTask;
     }
 

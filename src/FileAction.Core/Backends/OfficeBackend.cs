@@ -1,3 +1,5 @@
+using static FileAction.Core.Loc;
+
 namespace FileAction.Core.Backends;
 
 /// <summary>Office formats (DOC/DOCX/PPTX/XLSX/ODF → PDF and between each other) through headless LibreOffice.</summary>
@@ -54,7 +56,7 @@ public static class OfficeBackend
         if (produced is null)
         {
             OutputPaths.TryDelete(outDir);
-            throw new ConversionException("LibreOffice soubor nepřevedl (je dokument v pořádku a nezamčený heslem?).");
+            throw new ConversionException(T("LibreOffice soubor nepřevedl (je dokument v pořádku a nezamčený heslem?).", "LibreOffice could not convert the file (is it intact and not password-protected?)."));
         }
         return produced;
     }

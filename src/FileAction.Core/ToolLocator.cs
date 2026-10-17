@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using static FileAction.Core.Loc;
 
 namespace FileAction.Core;
 
@@ -28,7 +29,7 @@ public sealed class ToolLocator
     }
 
     public string Require(ExternalTool tool) =>
-        Find(tool) ?? throw new ConversionException($"Chybí nástroj {DisplayName(tool)}. {InstallHint(tool)}");
+        Find(tool) ?? throw new ConversionException(T($"Chybí nástroj {DisplayName(tool)}. {InstallHint(tool)}", $"{DisplayName(tool)} is missing. {InstallHint(tool)}"));
 
     public static string DisplayName(ExternalTool tool) => tool switch
     {
@@ -40,9 +41,9 @@ public sealed class ToolLocator
 
     public static string InstallHint(ExternalTool tool) => tool switch
     {
-        ExternalTool.Ffmpeg => "Nainstalujte ho příkazem: winget install Gyan.FFmpeg",
-        ExternalTool.Pandoc => "Nainstalujte ho příkazem: winget install JohnMacFarlane.Pandoc",
-        ExternalTool.LibreOffice => "Nainstalujte ho příkazem: winget install TheDocumentFoundation.LibreOffice",
+        ExternalTool.Ffmpeg => T("Nainstalujte ho příkazem: ", "Install it with: ") + "winget install Gyan.FFmpeg",
+        ExternalTool.Pandoc => T("Nainstalujte ho příkazem: ", "Install it with: ") + "winget install JohnMacFarlane.Pandoc",
+        ExternalTool.LibreOffice => T("Nainstalujte ho příkazem: ", "Install it with: ") + "winget install TheDocumentFoundation.LibreOffice",
         _ => "",
     };
 

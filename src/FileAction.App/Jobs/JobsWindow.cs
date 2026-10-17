@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using FileAction.App.Native;
 using FileAction.App.UI;
+using static FileAction.Core.Loc;
 
 namespace FileAction.App.Jobs;
 
@@ -18,7 +19,7 @@ internal sealed class JobsWindow : Window
 
     public JobsWindow()
     {
-        Title = "FileAction – průběh";
+        Title = T("FileAction – průběh", "FileAction – progress");
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -86,7 +87,7 @@ internal sealed class JobCard : Border
         _bar = new ProgressBar { Height = 4, Minimum = 0, Maximum = 1, IsIndeterminate = true, Foreground = Theme.Accent, Background = Theme.AccentSoft, BorderThickness = new Thickness(0) };
         _status = new TextBlock { Foreground = Theme.Muted, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0), Visibility = Visibility.Collapsed };
         _buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 6, 0, 0) };
-        _buttons.Children.Add(LinkButton("Zrušit", () => _cancel()));
+        _buttons.Children.Add(LinkButton(T("Zrušit", "Cancel"), () => _cancel()));
 
         var close = new Button
         {
@@ -97,7 +98,7 @@ internal sealed class JobCard : Border
             BorderThickness = new Thickness(0),
             Cursor = Cursors.Hand,
             VerticalAlignment = VerticalAlignment.Top,
-            ToolTip = "Zavřít",
+            ToolTip = T("Zavřít", "Close"),
         };
         close.Click += (_, _) =>
         {
@@ -136,14 +137,14 @@ internal sealed class JobCard : Border
         _bar.Foreground = Theme.Success;
         _status.Visibility = Visibility.Visible;
         _status.Foreground = warning is null ? Theme.Success : Theme.Error;
-        _status.Text = warning ?? (outputs.Count == 1 ? $"Hotovo: {Path.GetFileName(outputs[0])}" : $"Hotovo: {outputs.Count} výstupů");
+        _status.Text = warning ?? (outputs.Count == 1 ? T("Hotovo: ", "Done: ") + Path.GetFileName(outputs[0]) : T($"Hotovo: {outputs.Count} výstupů", $"Done: {outputs.Count} outputs"));
         _buttons.Children.Clear();
         if (outputs.Count > 0)
         {
             var first = outputs[0];
             if (File.Exists(first) && outputs.Count == 1)
-                _buttons.Children.Add(LinkButton("Otevřít", () => Shell(first)));
-            _buttons.Children.Add(LinkButton("Zobrazit ve složce", () => Reveal(first)));
+                _buttons.Children.Add(LinkButton(T("Otevřít", "Open"), () => Shell(first)));
+            _buttons.Children.Add(LinkButton(T("Zobrazit ve složce", "Show in folder"), () => Reveal(first)));
         }
         if (warning is null)
             CloseLater(TimeSpan.FromSeconds(8));
@@ -158,7 +159,7 @@ internal sealed class JobCard : Border
         _status.Foreground = Theme.Error;
         _status.Text = message;
         _buttons.Children.Clear();
-        _buttons.Children.Add(LinkButton("Kopírovat chybu", () =>
+        _buttons.Children.Add(LinkButton(T("Kopírovat chybu", "Copy error"), () =>
         {
             try
             {

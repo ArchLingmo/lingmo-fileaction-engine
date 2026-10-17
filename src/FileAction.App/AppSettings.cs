@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using FileAction.App.Input;
 using FileAction.Core;
+using static FileAction.Core.Loc;
 
 namespace FileAction.App;
 
@@ -31,6 +32,9 @@ public sealed class AppSettings
     public ModifierKey ToolsKey { get; set; } = ModifierKey.Ctrl;
     public ModifierKey ActionsKey { get; set; } = ModifierKey.Alt;
     public HotkeyPreset Hotkey { get; set; } = HotkeyPreset.CtrlAltSpace;
+
+    /// <summary>Null = follow the Windows display language.</summary>
+    public Language? Language { get; set; }
 
     /// <summary>Empty = save results next to the original file.</summary>
     public string? OutputDirectory { get; set; }
@@ -102,16 +106,16 @@ public sealed class AppSettings
 
     public static string WheelName(WheelKind wheel) => wheel switch
     {
-        WheelKind.Convert => "Převést",
-        WheelKind.Tools => "Nástroje",
-        _ => "Akce",
+        WheelKind.Convert => T("Převést", "Convert"),
+        WheelKind.Tools => T("Nástroje", "Tools"),
+        _ => T("Akce", "Actions"),
     };
 
     public static string HotkeyName(HotkeyPreset preset) => preset switch
     {
-        HotkeyPreset.CtrlAltSpace => "Ctrl + Alt + Mezerník",
-        HotkeyPreset.CtrlShiftSpace => "Ctrl + Shift + Mezerník",
+        HotkeyPreset.CtrlAltSpace => T("Ctrl + Alt + Mezerník", "Ctrl + Alt + Space"),
+        HotkeyPreset.CtrlShiftSpace => T("Ctrl + Shift + Mezerník", "Ctrl + Shift + Space"),
         HotkeyPreset.CtrlAltF => "Ctrl + Alt + F",
-        _ => "Vypnuto",
+        _ => T("Vypnuto", "Off"),
     };
 }

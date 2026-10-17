@@ -8,6 +8,7 @@ using FileAction.App.Native;
 using FileAction.App.Shell;
 using FileAction.App.UI;
 using FileAction.Core;
+using static FileAction.Core.Loc;
 
 namespace FileAction.App.Actions;
 
@@ -24,7 +25,7 @@ internal sealed class ShelfWindow : Window
 
     private ShelfWindow()
     {
-        Title = "Plovoucí panel";
+        Title = T("Plovoucí panel", "Floating shelf");
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -38,7 +39,7 @@ internal sealed class ShelfWindow : Window
         FontFamily = Theme.UiFont;
 
         _header = new TextBlock { Foreground = Theme.Text, FontWeight = FontWeights.SemiBold, FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
-        var close = IconButton("", "Zavřít");
+        var close = IconButton("", T("Zavřít", "Close"));
         close.Click += (_, _) => Close();
         var header = new DockPanel { Margin = new Thickness(12, 8, 6, 6), Background = Brushes.Transparent, Cursor = Cursors.SizeAll };
         DockPanel.SetDock(close, Dock.Right);
@@ -82,7 +83,7 @@ internal sealed class ShelfWindow : Window
 
         var hint = new TextBlock
         {
-            Text = "Táhněte položky ven, nebo sem přidejte další.",
+            Text = T("Táhněte položky ven, nebo sem přidejte další.", "Drag items out, or drop more here."),
             Foreground = Theme.Muted,
             FontSize = 11,
             TextWrapping = TextWrapping.Wrap,
@@ -141,13 +142,7 @@ internal sealed class ShelfWindow : Window
     private void UpdateHeader()
     {
         var n = _paths.Count;
-        _header.Text = n switch
-        {
-            0 => "Prázdný panel",
-            1 => "1 položka",
-            >= 2 and <= 4 => $"{n} položky",
-            _ => $"{n} položek",
-        };
+        _header.Text = n == 0 ? T("Prázdný panel", "Empty shelf") : Items(n);
     }
 
     private void OnListMouseMove(object sender, MouseEventArgs e)

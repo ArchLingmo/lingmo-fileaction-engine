@@ -6,6 +6,7 @@ using FileAction.App.UI;
 using FileAction.Core;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
+using static FileAction.Core.Loc;
 
 namespace FileAction.App.Actions;
 
@@ -22,7 +23,7 @@ internal static class ShareHelper
         foreach (var item in items)
             storageItems.Add(await StorageFile.GetFileFromPathAsync(item.Path));
         _pending = storageItems;
-        _title = items.Count == 1 ? items[0].Name : $"{items.Count} soubory";
+        _title = items.Count == 1 ? items[0].Name : Items(items.Count);
 
         var hwnd = EnsureHost();
         DataTransferManagerInterop.ShowShareUIForWindow(hwnd);

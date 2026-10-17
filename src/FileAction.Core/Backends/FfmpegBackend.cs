@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using static FileAction.Core.Loc;
 
 namespace FileAction.Core.Backends;
 
@@ -73,7 +74,7 @@ public static partial class FfmpegBackend
             }
             catch (ConversionException) when (noAudio)
             {
-                throw new ConversionException("Soubor neobsahuje zvukovou stopu.");
+                throw new ConversionException(T("Soubor neobsahuje zvukovou stopu.", "The file has no audio track."));
             }
         }
 
@@ -127,13 +128,13 @@ public static partial class FfmpegBackend
     {
         text = text.Trim().Replace(',', '.');
         if (text.Length == 0)
-            throw new ConversionException("Chybí čas.");
+            throw new ConversionException(T("Chybí čas.", "Missing time."));
         var parts = text.Split(':');
         double seconds = 0;
         foreach (var p in parts)
         {
             if (!double.TryParse(p, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) || v < 0)
-                throw new ConversionException($"Neplatný čas: {text}");
+                throw new ConversionException(T($"Neplatný čas: {text}", $"Invalid time: {text}"));
             seconds = seconds * 60 + v;
         }
         return seconds;

@@ -1,6 +1,7 @@
 using System.Globalization;
 using FileAction.Core.Backends;
 using static FileAction.Core.Operations.Helpers;
+using static FileAction.Core.Loc;
 
 namespace FileAction.Core.Operations;
 
@@ -34,7 +35,7 @@ public static class Catalog
         {
             ops.Add(new PerFileOperation($"image.to.{target}", WheelKind.Convert, Formats.Display(target), Glyphs.Photo, Formats.Images,
                 async (item, ctx, _) => [await Produce(item, ctx, target, tmp => ImageBackend.ConvertAsync(item.Path, tmp, target, ctx.Settings, ctx.CancellationToken))],
-                targetFormat: target, subtitle: target == "pdf" ? "dokument" : null));
+                targetFormat: target, subtitle: target == "pdf" ? T("dokument", "document") : null));
         }
         ops.Add(new PerFileOperation("gif.to.mp4", WheelKind.Convert, "MP4", Glyphs.Video, ["gif"],
             async (item, ctx, p) => [await FfmpegBackend.ConvertAsync(item, "mp4", ctx, p)], subtitle: "video")
@@ -43,17 +44,17 @@ public static class Catalog
             async (item, ctx, p) => [await FfmpegBackend.ConvertAsync(item, "webm", ctx, p)], subtitle: "video")
         { Requires = [ExternalTool.Ffmpeg] });
 
-        ImageTool(ops, "image.compress", "Komprimovat", Glyphs.Shrink, "komprimováno",
+        ImageTool(ops, "image.compress", T("Komprimovat", "Compress"), Glyphs.Shrink, T("komprimováno", "compressed"),
             (item, ctx, tmp) => ImageBackend.CompressAsync(item.Path, tmp, ctx.Settings.CompressQuality, ctx.CancellationToken));
-        ImageEdit(ops, "image.half", "Zmenšit", Glyphs.Shrink, "50 %", "zmenšeno", img => ImageBackend.ResizePercent(img, 50));
-        ImageEdit(ops, "image.max1920", "Max 1920 px", Glyphs.Shrink, "na web", "1920", img => ImageBackend.ResizeMax(img, 1920));
-        ImageEdit(ops, "image.rotate.right", "Otočit", Glyphs.Rotate, "doprava", "otočeno", img => img.Rotate(90));
-        ImageEdit(ops, "image.rotate.left", "Otočit", Glyphs.Rotate, "doleva", "otočeno", img => img.Rotate(-90));
-        ImageEdit(ops, "image.flip", "Zrcadlit", Glyphs.Flip, null, "zrcadleno", img => img.Flop());
-        ImageEdit(ops, "image.square", "Čtverec", Glyphs.Crop, "oříznout", "čtverec", ImageBackend.CropSquare);
-        ImageEdit(ops, "image.grayscale", "Černobíle", Glyphs.Color, null, "černobíle", ImageBackend.Grayscale);
-        ImageEdit(ops, "image.strip", "Bez metadat", Glyphs.Clear, "GPS, EXIF", "bez metadat", img => img.Strip());
-        ops.Add(new BatchOperation("image.merge.pdf", WheelKind.Tools, "Spojit do PDF", Glyphs.Merge,
+        ImageEdit(ops, "image.half", T("Zmenšit", "Shrink"), Glyphs.Shrink, "50 %", T("zmenšeno", "smaller"), img => ImageBackend.ResizePercent(img, 50));
+        ImageEdit(ops, "image.max1920", "Max 1920 px", Glyphs.Shrink, T("na web", "for web"), "1920", img => ImageBackend.ResizeMax(img, 1920));
+        ImageEdit(ops, "image.rotate.right", T("Otočit", "Rotate"), Glyphs.Rotate, T("doprava", "right"), T("otočeno", "rotated"), img => img.Rotate(90));
+        ImageEdit(ops, "image.rotate.left", T("Otočit", "Rotate"), Glyphs.Rotate, T("doleva", "left"), T("otočeno", "rotated"), img => img.Rotate(-90));
+        ImageEdit(ops, "image.flip", T("Zrcadlit", "Mirror"), Glyphs.Flip, null, T("zrcadleno", "mirrored"), img => img.Flop());
+        ImageEdit(ops, "image.square", T("Čtverec", "Square"), Glyphs.Crop, T("oříznout", "crop"), T("čtverec", "square"), ImageBackend.CropSquare);
+        ImageEdit(ops, "image.grayscale", T("Černobíle", "Grayscale"), Glyphs.Color, null, T("černobíle", "grayscale"), ImageBackend.Grayscale);
+        ImageEdit(ops, "image.strip", T("Bez metadat", "No metadata"), Glyphs.Clear, "GPS, EXIF", T("bez metadat", "no metadata"), img => img.Strip());
+        ops.Add(new BatchOperation("image.merge.pdf", WheelKind.Tools, T("Spojit do PDF", "Merge to PDF"), Glyphs.Merge,
             BatchOperation.AllOf(Formats.Images, min: 2),
             async (items, ctx) => [await OutputPaths.ProduceAsync(ctx.OutputDirFor(items[0].Path), items[0].BaseName, "pdf",
                 tmp => ImageBackend.ImagesToPdfAsync(items.Select(i => i.Path).OrderBy(p => p, NaturalComparer.Instance).ToList(), tmp, ctx.Settings.JpegQuality, ctx.CancellationToken))]));
@@ -78,19 +79,19 @@ public static class Catalog
             { Requires = [ExternalTool.Ffmpeg] });
         }
 
-        Ffmpeg(ops, "audio.compress", "Komprimovat", Glyphs.Shrink, Formats.Audio, "komprimováno",
+        Ffmpeg(ops, "audio.compress", T("Komprimovat", "Compress"), Glyphs.Shrink, Formats.Audio, T("komprimováno", "compressed"),
             (item, ctx) => ["-vn", "-c:a", "libmp3lame", "-b:a", "128k"], outputFormat: _ => "mp3", subtitle: "MP3 128k");
-        Ffmpeg(ops, "audio.normalize", "Normalizovat", Glyphs.Equalizer, Formats.Audio, "normalizováno",
+        Ffmpeg(ops, "audio.normalize", T("Normalizovat", "Normalize"), Glyphs.Equalizer, Formats.Audio, T("normalizováno", "normalized"),
             (item, ctx) => ["-af", "loudnorm=I=-16:TP=-1.5:LRA=11", .. FfmpegBackend.CodecArgs(FfmpegBackend.SafeContainer(item.Format), ctx.Settings)],
-            subtitle: "hlasitost");
+            subtitle: T("hlasitost", "loudness"));
         ops.Add(Trim("audio.trim", Formats.Audio));
-        ops.Add(new BatchOperation("audio.concat", WheelKind.Tools, "Spojit", Glyphs.Merge, BatchOperation.AllOf(Formats.Audio, min: 2),
+        ops.Add(new BatchOperation("audio.concat", WheelKind.Tools, T("Spojit", "Join"), Glyphs.Merge, BatchOperation.AllOf(Formats.Audio, min: 2),
             async (items, ctx) =>
             {
                 var sorted = items.OrderBy(i => i.Path, NaturalComparer.Instance).ToList();
                 var format = FfmpegBackend.SafeContainer(sorted[0].Format);
                 var graph = string.Concat(Enumerable.Range(0, sorted.Count).Select(i => $"[{i}:a]")) + $"concat=n={sorted.Count}:v=0:a=1[a]";
-                return [await OutputPaths.ProduceAsync(ctx.OutputDirFor(sorted[0].Path), $"{sorted[0].BaseName} (spojeno)", format, tmp =>
+                return [await OutputPaths.ProduceAsync(ctx.OutputDirFor(sorted[0].Path), $"{sorted[0].BaseName} ({T("spojeno", "joined")})", format, tmp =>
                     FfmpegBackend.RunAsync(ctx, sorted.Select(i => i.Path).ToList(),
                         ["-filter_complex", graph, "-map", "[a]", .. FfmpegBackend.CodecArgs(format, ctx.Settings)], tmp, ctx.Progress))];
             })
@@ -105,27 +106,27 @@ public static class Catalog
         {
             ops.Add(new PerFileOperation($"video.to.{target}", WheelKind.Convert, Formats.Display(target), target == "mp3" ? Glyphs.Audio : Glyphs.Video, Formats.Video,
                 async (item, ctx, p) => [await FfmpegBackend.ConvertAsync(item, target, ctx, p)], targetFormat: target,
-                subtitle: target switch { "mp3" => "jen zvuk", "gif" => "animace", _ => null })
+                subtitle: target switch { "mp3" => T("jen zvuk", "audio only"), "gif" => T("animace", "animation"), _ => null })
             { Requires = [ExternalTool.Ffmpeg] });
         }
 
-        Ffmpeg(ops, "video.compress", "Komprimovat", Glyphs.Shrink, Formats.Video, "komprimováno",
+        Ffmpeg(ops, "video.compress", T("Komprimovat", "Compress"), Glyphs.Shrink, Formats.Video, T("komprimováno", "compressed"),
             (item, ctx) => H264(ctx.Settings.CompressVideoCrf, "slow", null, "128k"), outputFormat: _ => "mp4", subtitle: "H.264");
         Ffmpeg(ops, "video.720p", "720p", Glyphs.Shrink, Formats.Video, "720p",
-            (item, ctx) => H264(ctx.Settings.VideoCrf, "medium", "scale=-2:'min(720,ih)'", "160k"), outputFormat: _ => "mp4", subtitle: "zmenšit");
-        Ffmpeg(ops, "video.mute", "Ztlumit", Glyphs.Mute, Formats.Video, "bez zvuku",
+            (item, ctx) => H264(ctx.Settings.VideoCrf, "medium", "scale=-2:'min(720,ih)'", "160k"), outputFormat: _ => "mp4", subtitle: T("zmenšit", "downscale"));
+        Ffmpeg(ops, "video.mute", T("Ztlumit", "Mute"), Glyphs.Mute, Formats.Video, T("bez zvuku", "muted"),
             (item, ctx) => FfmpegBackend.SafeContainer(item.Format) == item.Format
                 ? ["-map", "0:v", "-c:v", "copy", "-an"]
                 : [.. H264(ctx.Settings.VideoCrf, "medium", null, null), "-an"],
-            subtitle: "bez zvuku");
+            subtitle: T("bez zvuku", "muted"));
         ops.Add(Trim("video.trim", Formats.Video));
-        Ffmpeg(ops, "video.rotate", "Otočit", Glyphs.Rotate, Formats.Video, "otočeno",
-            (item, ctx) => H264(ctx.Settings.VideoCrf, "medium", "transpose=1", "160k"), outputFormat: _ => "mp4", subtitle: "doprava");
-        Ffmpeg(ops, "video.speed2", "Zrychlit", Glyphs.Play, Formats.Video, "2×",
+        Ffmpeg(ops, "video.rotate", T("Otočit", "Rotate"), Glyphs.Rotate, Formats.Video, T("otočeno", "rotated"),
+            (item, ctx) => H264(ctx.Settings.VideoCrf, "medium", "transpose=1", "160k"), outputFormat: _ => "mp4", subtitle: T("doprava", "right"));
+        Ffmpeg(ops, "video.speed2", T("Zrychlit", "Speed up"), Glyphs.Play, Formats.Video, "2×",
             (item, ctx) => [.. H264(ctx.Settings.VideoCrf, "medium", "setpts=0.5*PTS", "160k"), "-af", "atempo=2.0"],
             outputFormat: _ => "mp4", subtitle: "2×");
-        Ffmpeg(ops, "video.thumbnail", "Náhled", Glyphs.Camera, Formats.Video, "náhled",
-            (item, ctx) => ["-vf", "thumbnail=150", "-frames:v", "1", "-update", "1"], outputFormat: _ => "png", subtitle: "snímek PNG");
+        Ffmpeg(ops, "video.thumbnail", T("Náhled", "Thumbnail"), Glyphs.Camera, Formats.Video, T("náhled", "thumbnail"),
+            (item, ctx) => ["-vf", "thumbnail=150", "-frames:v", "1", "-update", "1"], outputFormat: _ => "png", subtitle: T("snímek PNG", "PNG frame"));
     }
 
     private static string[] H264(int crf, string preset, string? filter, string? audioBitrate)
@@ -145,13 +146,13 @@ public static class Catalog
         { Requires = [ExternalTool.Ffmpeg] });
 
     private static Operation Trim(string id, ISet<string> inputs) =>
-        new PerFileOperation(id, WheelKind.Tools, "Oříznout", Glyphs.Stopwatch, inputs, async (item, ctx, p) =>
+        new PerFileOperation(id, WheelKind.Tools, T("Oříznout", "Trim"), Glyphs.Stopwatch, inputs, async (item, ctx, p) =>
         {
             var start = FfmpegBackend.ParseTime(ctx.Param("start", "0"));
             var endText = ctx.Param("end");
             double? length = endText.Length > 0 ? FfmpegBackend.ParseTime(endText) - start : null;
             if (length is <= 0)
-                throw new ConversionException("Konec musí být až za začátkem.");
+                throw new ConversionException(T("Konec musí být až za začátkem.", "The end must come after the start."));
             var format = FfmpegBackend.SafeContainer(item.Format);
             var args = new List<string>();
             if (length is not null)
@@ -159,17 +160,17 @@ public static class Catalog
             args.AddRange(Formats.Video.Contains(item.Format)
                 ? H264(ctx.Settings.VideoCrf, "medium", null, "160k")
                 : FfmpegBackend.CodecArgs(format, ctx.Settings));
-            return [await FfmpegBackend.TransformAsync(item, "oříznuto", ctx, p, args,
+            return [await FfmpegBackend.TransformAsync(item, T("oříznuto", "trimmed"), ctx, p, args,
                 Formats.Video.Contains(item.Format) ? "mp4" : format,
                 inputArgs: start > 0 ? ["-ss", start.ToString("0.###", CultureInfo.InvariantCulture)] : null,
                 duration: length)];
-        }, subtitle: "začátek–konec")
+        }, subtitle: T("začátek–konec", "start–end"))
         {
             Requires = [ExternalTool.Ffmpeg],
             Parameters =
             [
-                new ParameterSpec("start", "Začátek", "0:00", "např. 0:30 nebo 1:02:03"),
-                new ParameterSpec("end", "Konec", "", "prázdné = do konce"),
+                new ParameterSpec("start", T("Začátek", "Start"), "0:00", T("např. 0:30 nebo 1:02:03", "e.g. 0:30 or 1:02:03")),
+                new ParameterSpec("end", T("Konec", "End"), "", T("prázdné = do konce", "empty = until the end")),
             ],
         };
 
@@ -181,7 +182,7 @@ public static class Catalog
         foreach (var image in new[] { "jpg", "png" })
         {
             ops.Add(new PerFileOperation($"pdf.to.{image}", WheelKind.Convert, Formats.Display(image), Glyphs.Photo, Formats.Pdf,
-                (item, ctx, p) => PdfBackend.RenderAsync(item, image, ctx, p), subtitle: "všechny strany"));
+                (item, ctx, p) => PdfBackend.RenderAsync(item, image, ctx, p), subtitle: T("všechny strany", "all pages")));
         }
         ops.Add(new PerFileOperation("pdf.to.pptx", WheelKind.Convert, "PPTX", Glyphs.Page, Formats.Pdf,
             async (item, ctx, _) => [await OfficeBackend.ConvertAsync(item, "pptx", ctx, "impress_pdf_import")], subtitle: "PowerPoint")
@@ -192,22 +193,22 @@ public static class Catalog
                 async (item, ctx, _) => [await PdfBackend.ToTextAsync(item, text, ctx)], subtitle: text == "md" ? "Markdown" : "text"));
         }
         ops.Add(PdfDoc("html", "web"));
-        ops.Add(PdfDoc("epub", "e-kniha"));
+        ops.Add(PdfDoc("epub", T("e-kniha", "e-book")));
 
-        ops.Add(new BatchOperation("pdf.merge", WheelKind.Tools, "Spojit PDF", Glyphs.Merge, BatchOperation.AllOf(Formats.Pdf, min: 2),
+        ops.Add(new BatchOperation("pdf.merge", WheelKind.Tools, T("Spojit PDF", "Merge PDFs"), Glyphs.Merge, BatchOperation.AllOf(Formats.Pdf, min: 2),
             async (items, ctx) =>
             {
                 var sorted = items.Select(i => i.Path).OrderBy(p => p, NaturalComparer.Instance).ToList();
-                return [await OutputPaths.ProduceAsync(ctx.OutputDirFor(sorted[0]), $"{items[0].BaseName} (spojeno)", "pdf",
+                return [await OutputPaths.ProduceAsync(ctx.OutputDirFor(sorted[0]), $"{items[0].BaseName} ({T("spojeno", "merged")})", "pdf",
                     tmp => Task.Run(() => PdfBackend.Merge(sorted, tmp), ctx.CancellationToken))];
             }));
-        ops.Add(new PerFileOperation("pdf.split", WheelKind.Tools, "Rozdělit", Glyphs.Split, Formats.Pdf,
-            (item, ctx, p) => PdfBackend.SplitAsync(item, ctx, p), subtitle: "po stranách"));
-        ops.Add(new PerFileOperation("pdf.rotate", WheelKind.Tools, "Otočit", Glyphs.Rotate, Formats.Pdf,
-            async (item, ctx, _) => [await OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), $"{item.BaseName} (otočeno)", "pdf",
-                tmp => Task.Run(() => PdfBackend.Rotate(item.Path, tmp, 90), ctx.CancellationToken))], subtitle: "doprava"));
-        ops.Add(new PerFileOperation("pdf.optimize", WheelKind.Tools, "Optimalizovat", Glyphs.Shrink, Formats.Pdf,
-            async (item, ctx, _) => [await OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), $"{item.BaseName} (optimalizováno)", "pdf",
+        ops.Add(new PerFileOperation("pdf.split", WheelKind.Tools, T("Rozdělit", "Split"), Glyphs.Split, Formats.Pdf,
+            (item, ctx, p) => PdfBackend.SplitAsync(item, ctx, p), subtitle: T("po stranách", "into pages")));
+        ops.Add(new PerFileOperation("pdf.rotate", WheelKind.Tools, T("Otočit", "Rotate"), Glyphs.Rotate, Formats.Pdf,
+            async (item, ctx, _) => [await OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), $"{item.BaseName} ({T("otočeno", "rotated")})", "pdf",
+                tmp => Task.Run(() => PdfBackend.Rotate(item.Path, tmp, 90), ctx.CancellationToken))], subtitle: T("doprava", "right")));
+        ops.Add(new PerFileOperation("pdf.optimize", WheelKind.Tools, T("Optimalizovat", "Optimize"), Glyphs.Shrink, Formats.Pdf,
+            async (item, ctx, _) => [await OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), $"{item.BaseName} ({T("optimalizováno", "optimized")})", "pdf",
                 tmp => Task.Run(() => PdfBackend.Optimize(item.Path, tmp), ctx.CancellationToken))]));
     }
 
@@ -224,7 +225,7 @@ public static class Catalog
         {
             ops.Add(new PerFileOperation($"doc.to.{target}", WheelKind.Convert, Formats.Display(target), Glyphs.Document, Formats.Documents,
                 async (item, ctx, _) => [await DocumentAsync(item, target, ctx)], targetFormat: target,
-                subtitle: target switch { "docx" => "Word", "md" => "Markdown", "epub" => "e-kniha", "txt" => "text", "html" => "web", _ => null })
+                subtitle: target switch { "docx" => "Word", "md" => "Markdown", "epub" => T("e-kniha", "e-book"), "txt" => "text", "html" => "web", _ => null })
             {
                 AvailableFor = (tools, item) => DocumentRoute(item.Format, target, tools) is not null,
             });
@@ -255,7 +256,7 @@ public static class Catalog
     private static async Task<string> DocumentAsync(FileItem item, string target, OperationContext ctx)
     {
         var route = DocumentRoute(item.Format, target, ctx.Tools) ?? throw new ConversionException(
-            $"Pro převod {Formats.Display(item.Format)} → {Formats.Display(target)} je potřeba Pandoc nebo LibreOffice.");
+            T($"Pro převod {Formats.Display(item.Format)} → {Formats.Display(target)} je potřeba Pandoc nebo LibreOffice.", $"Converting {Formats.Display(item.Format)} → {Formats.Display(target)} needs Pandoc or LibreOffice."));
         var dir = ctx.OutputDirFor(item.Path);
         switch (route)
         {
@@ -319,7 +320,7 @@ public static class Catalog
                         }
                     }
                     return [await OfficeBackend.ConvertAsync(item, target, ctx)];
-                }, targetFormat: target, subtitle: target is "png" or "jpg" ? "všechny snímky" : null)
+                }, targetFormat: target, subtitle: target is "png" or "jpg" ? T("všechny snímky", "all slides") : null)
             { Requires = [ExternalTool.LibreOffice] });
         }
     }
@@ -351,7 +352,7 @@ public static class Catalog
         {
             ops.Add(new PerFileOperation($"subs.to.{target}", WheelKind.Convert, Formats.Display(target), Glyphs.Subtitles, Formats.Subtitles,
                 async (item, ctx, _) => [await SubtitleBackend.ConvertAsync(item, target, ctx)], targetFormat: target,
-                subtitle: target == "txt" ? "jen text" : null));
+                subtitle: target == "txt" ? T("jen text", "text only") : null));
         }
     }
 
@@ -359,7 +360,7 @@ public static class Catalog
 
     private static void AddArchives(List<Operation> ops)
     {
-        ops.Add(new PerFileOperation("archive.extract", WheelKind.Convert, "Rozbalit", Glyphs.Extract, Formats.Archives,
+        ops.Add(new PerFileOperation("archive.extract", WheelKind.Convert, T("Rozbalit", "Extract"), Glyphs.Extract, Formats.Archives,
             async (item, ctx, _) => [await ArchiveBackend.ExtractAsync(item.Path, ctx.OutputDirFor(item.Path), ctx.CancellationToken)]));
         foreach (var target in Formats.ArchiveOutputs)
         {
@@ -369,7 +370,7 @@ public static class Catalog
 
         foreach (var (target, label) in new[] { ("zip", "ZIP"), ("tar.gz", "TAR.GZ") })
         {
-            ops.Add(new BatchOperation($"pack.{target}", WheelKind.Tools, "Zabalit", Glyphs.Pack, _ => true,
+            ops.Add(new BatchOperation($"pack.{target}", WheelKind.Tools, T("Zabalit", "Archive"), Glyphs.Pack, _ => true,
                 async (items, ctx) => [await OutputPaths.ProduceAsync(ctx.OutputDirFor(items[0].Path), ArchiveBackend.ArchiveNameFor(items), target,
                     tmp => ArchiveBackend.PackAsync(items.Select(i => i.Path).ToList(), tmp, target, ctx.CancellationToken))],
                 subtitle: label));

@@ -3,6 +3,7 @@ using PdfSharp.Pdf;
 using PdfSharp.Pdf.IO;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
+using static FileAction.Core.Loc;
 
 namespace FileAction.Core.Backends;
 
@@ -16,7 +17,7 @@ public static class PdfBackend
     }
 
     /// <summary>
-    /// Renders every page. A single page becomes "name.png"; more pages go into a folder "name (stránky)".
+    /// Renders every page. A single page becomes "name.png"; more pages go into a folder "name (pages)".
     /// </summary>
     public static async Task<IEnumerable<string>> RenderAsync(FileItem item, string format, OperationContext ctx, IProgress<double> progress)
     {
@@ -32,7 +33,7 @@ public static class PdfBackend
             return [single];
         }
 
-        var folder = OutputPaths.UniqueDirectory(dir, $"{item.BaseName} (stránky)");
+        var folder = OutputPaths.UniqueDirectory(dir, $"{item.BaseName} ({T("stránky", "pages")})");
         Directory.CreateDirectory(folder);
         var digits = count.ToString().Length;
         try
@@ -78,7 +79,7 @@ public static class PdfBackend
             sb.Append(markdown ? ToMarkdownParagraphs(text) : text);
         }
         if (sb.Length == 0)
-            throw new ConversionException("PDF neobsahuje žádný text (nejspíš je to sken). Zkuste převod na JPG/PNG.");
+            throw new ConversionException(T("PDF neobsahuje žádný text (nejspíš je to sken). Zkuste převod na JPG/PNG.", "The PDF contains no text (probably a scan). Try converting it to JPG/PNG."));
         return sb.ToString();
     }
 
@@ -153,7 +154,7 @@ public static class PdfBackend
     public static async Task<IEnumerable<string>> SplitAsync(FileItem item, OperationContext ctx, IProgress<double> progress)
     {
         var dir = ctx.OutputDirFor(item.Path);
-        var folder = OutputPaths.UniqueDirectory(dir, $"{item.BaseName} (stránky)");
+        var folder = OutputPaths.UniqueDirectory(dir, $"{item.BaseName} ({T("stránky", "pages")})");
         Directory.CreateDirectory(folder);
         try
         {
@@ -206,7 +207,7 @@ public static class PdfBackend
         }
         catch (PdfReaderException ex)
         {
-            throw new ConversionException($"PDF {Path.GetFileName(path)} nelze otevřít: {ex.Message}", ex);
+            throw new ConversionException(T($"PDF {Path.GetFileName(path)} nelze otevřít: {ex.Message}", $"Cannot open PDF {Path.GetFileName(path)}: {ex.Message}"), ex);
         }
     }
 }

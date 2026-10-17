@@ -1,3 +1,5 @@
+using static FileAction.Core.Loc;
+
 namespace FileAction.Core;
 
 public static class OutputPaths
@@ -27,7 +29,7 @@ public static class OutputPaths
         {
             await produce(temp).ConfigureAwait(false);
             if (!File.Exists(temp))
-                throw new ConversionException("Převod nevytvořil žádný výstup.");
+                throw new ConversionException(T("Převod nevytvořil žádný výstup.", "The conversion produced no output."));
             var final = Unique(dir, baseName, ext);
             File.Move(temp, final);
             return final;

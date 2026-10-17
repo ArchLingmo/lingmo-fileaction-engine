@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using static FileAction.Core.Loc;
 
 namespace FileAction.Core.Backends;
 
@@ -89,7 +90,7 @@ public static partial class SubtitleBackend
         {
             var cues = Parse(await File.ReadAllTextAsync(item.Path, ctx.CancellationToken).ConfigureAwait(false));
             if (cues.Count == 0)
-                throw new ConversionException("V souboru nejsou žádné titulky.");
+                throw new ConversionException(T("V souboru nejsou žádné titulky.", "The file contains no subtitles."));
             var text = format switch
             {
                 "srt" => ToSrt(cues),

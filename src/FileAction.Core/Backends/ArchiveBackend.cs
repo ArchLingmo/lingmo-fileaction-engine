@@ -3,6 +3,7 @@ using System.IO.Compression;
 using SharpCompress.Archives;
 using SharpCompress.Common;
 using SharpCompress.Readers;
+using static FileAction.Core.Loc;
 
 namespace FileAction.Core.Backends;
 
@@ -39,7 +40,7 @@ public static class ArchiveBackend
 
             var entries = Directory.GetFileSystemEntries(temp);
             if (entries.Length == 0)
-                throw new ConversionException("Archiv je prázdný.");
+                throw new ConversionException(T("Archiv je prázdný.", "The archive is empty."));
             if (entries.Length == 1)
             {
                 var name = Path.GetFileName(entries[0]);
@@ -106,7 +107,7 @@ public static class ArchiveBackend
         }
         catch (Exception ex) when (ex is InvalidFormatException or ArchiveOperationException or CryptographicException)
         {
-            throw new ConversionException($"Archiv nelze rozbalit: {ex.Message}", ex);
+            throw new ConversionException(T($"Archiv nelze rozbalit: {ex.Message}", $"Cannot extract the archive: {ex.Message}"), ex);
         }
     }
 
@@ -116,7 +117,7 @@ public static class ArchiveBackend
         var relative = entryKey.Replace('\\', '/').TrimStart('/');
         var path = Path.GetFullPath(Path.Combine(fullDestination, relative));
         if (!path.StartsWith(fullDestination, StringComparison.OrdinalIgnoreCase))
-            throw new ConversionException($"Archiv obsahuje nebezpečnou cestu: {entryKey}");
+            throw new ConversionException(T($"Archiv obsahuje nebezpečnou cestu: {entryKey}", $"The archive contains an unsafe path: {entryKey}"));
         return path;
     }
 
@@ -177,7 +178,7 @@ public static class ArchiveBackend
     }
 
     public static string ArchiveNameFor(IReadOnlyList<FileItem> items) =>
-        items.Count == 1 ? items[0].BaseName : "Archiv";
+        items.Count == 1 ? items[0].BaseName : T("Archiv", "Archive");
 
     /// <summary>Repacks an archive into another archive format.</summary>
     public static async Task<string> RepackAsync(FileItem item, string format, OperationContext ctx)
