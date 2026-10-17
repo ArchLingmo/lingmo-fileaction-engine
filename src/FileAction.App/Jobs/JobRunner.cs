@@ -62,7 +62,7 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
         try
         {
             var result = await Task.Run(() => op.ExecuteAsync(items, context));
-            card.Complete(result.Outputs, result.Message);
+            card.Complete(result.Outputs, result.Message, result.Note);
             if (settings.RevealResult && result.Outputs.Count > 0)
                 JobCard.Reveal(result.Outputs[0]);
         }

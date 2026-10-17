@@ -34,6 +34,9 @@ internal static class SelfTest
                 RenderAll(Path.Combine(outDir, folder), language == Language.English, log);
             }
 
+            TestDrops(log);
+            TestOcr(outDir, log);
+
             File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
             return 0;
         }
@@ -58,7 +61,7 @@ internal static class SelfTest
         string N(string cs, string en) => english ? en : cs;
         var settings = new AppSettings();
         var tools = new ToolLocator();
-        var core = Catalog.Build();
+        var core = WheelController.BuildOperations();
         var actions = FileActions.Build(settings, () => { });
         IReadOnlyList<Operation> Source(WheelKind wheel, IReadOnlyList<FileItem> items) =>
             Catalog.For(wheel == WheelKind.Actions ? actions : core, wheel, items, tools);
@@ -100,6 +103,70 @@ internal static class SelfTest
         var dialog = new ParameterDialog(trim, [new FileItem(N(@"C:\Videa\klip.mov", @"C:\Videos\clip.mov"))]);
         SaveWindow(dialog, Path.Combine(outDir, "trim-dialog.png"), 360);
         log.Add($"ok {Path.GetFileName(outDir)}/parameter dialog");
+    }
+
+    /// <summary>Virtual files (as browsers and Outlook drag them) and raw images become real files.</summary>
+    private static void TestDrops(List<string> log)
+    {
+        var descriptor = new byte[4 + 592];
+        BitConverter.GetBytes(1).CopyTo(descriptor, 0);
+        System.Text.Encoding.Unicode.GetBytes("selftest-virtual.txt").CopyTo(descriptor, 4 + 72);
+        var data = new DataObject();
+        data.SetData("FileGroupDescriptorW", new MemoryStream(descriptor));
+        data.SetData("FileContents", new MemoryStream(System.Text.Encoding.UTF8.GetBytes("hello")));
+
+        var preview = DropContent.Read(data, materialize: false) ?? throw new InvalidOperationException("virtual file not recognised");
+        Check(preview.Items.Single().Format == "txt", "virtual file preview has the right type");
+        var dropped = DropContent.Read(data, materialize: true) ?? throw new InvalidOperationException("virtual file not saved");
+        var path = dropped.Items.Single().Path;
+        Check(File.ReadAllText(path) == "hello", "virtual file contents");
+        File.Delete(path);
+        log.Add("ok drop/virtual-file");
+
+        var bitmap = BitmapSource.Create(4, 4, 96, 96, PixelFormats.Bgra32, null, new byte[4 * 4 * 4], 16);
+        var image = new DataObject(DataFormats.Bitmap, bitmap);
+        var imageDrop = DropContent.Read(image, materialize: true) ?? throw new InvalidOperationException("image not saved");
+        var png = imageDrop.Items.Single().Path;
+        Check(File.Exists(png) && new FileInfo(png).Length > 0, "dropped image saved as PNG");
+        File.Delete(png);
+        log.Add("ok drop/image");
+
+        var link = new DataObject(DataFormats.UnicodeText, "https://example.com/photos/cat.webp");
+        var linkDrop = DropContent.Read(link, materialize: false) ?? throw new InvalidOperationException("link not recognised");
+        Check(linkDrop.Items.Single().Format == "webp", "link keeps its file type");
+        log.Add("ok drop/link");
+    }
+
+    /// <summary>Renders a line of text and reads it back with Windows OCR, when the runner has it.</summary>
+    private static void TestOcr(string outDir, List<string> log)
+    {
+        if (!Ocr.OcrOperation.Available)
+        {
+            log.Add("skipped ocr (no recognizer languages on this machine)");
+            return;
+        }
+        var text = new TextBlock
+        {
+            Text = "FileAction OCR 12345",
+            FontSize = 48,
+            FontFamily = new FontFamily("Segoe UI"),
+            Foreground = Brushes.Black,
+            Background = Brushes.White,
+            Padding = new Thickness(30),
+        };
+        var png = Path.Combine(outDir, "ocr-input.png");
+        SaveElement(text, png);
+        var engine = Windows.Media.Ocr.OcrEngine.TryCreateFromUserProfileLanguages()
+            ?? Windows.Media.Ocr.OcrEngine.TryCreateFromLanguage(Windows.Media.Ocr.OcrEngine.AvailableRecognizerLanguages[0]);
+        var result = Task.Run(() => Ocr.OcrOperation.RecognizeAsync(engine, png)).GetAwaiter().GetResult();
+        Check(result.Contains("12345"), $"OCR read \"{result}\"");
+        log.Add($"ok ocr: {result}");
+    }
+
+    private static void Check(bool condition, string what)
+    {
+        if (!condition)
+            throw new InvalidOperationException("Self-test check failed: " + what);
     }
 
     private static void SaveWindow(Window window, string file, double width, bool desktop = false)

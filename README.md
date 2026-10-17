@@ -19,7 +19,7 @@ Inspired by the wonderful [Tangerine](https://tangerineformac.com/) for macOS. F
 
 ## How it works
 
-1. Grab a file (in File Explorer, on the desktop, in any app that can drag files).
+1. Grab a file: in File Explorer, on the desktop, an image or link in your browser, an e-mail attachment, a file inside a ZIP folder…
 2. While dragging, **tap** a key:
 
    | Key | Wheel | What it offers |
@@ -32,7 +32,7 @@ Inspired by the wonderful [Tangerine](https://tangerineformac.com/) for macOS. F
 
 The wheel stays open until you drop, so you can release the key and tap another one to switch wheels. Keys can be reassigned in Settings.
 
-**No mouse:** select files in File Explorer and press **Ctrl + Alt + Space**. Arrows pick a slice, Enter runs it, Tab switches wheels, Esc closes, 1–9 run a slice directly.
+**No mouse:** select files in File Explorer, or copy a file or a screenshot (**Win + Shift + S**), and press **Ctrl + Alt + Space**. Arrows pick a slice, Enter runs it, Tab switches wheels, Esc closes, 1–9 run a slice directly.
 You can also open the wheel with **right-click → FileAction…** (on Windows 11 under “Show more options”).
 
 Progress shows up in the corner of the screen, where you can open the result, show it in its folder or cancel.
@@ -56,7 +56,10 @@ Progress shows up in the corner of the screen, where you can open the result, sh
 - video: compress (H.264), 720p, mute, trim by time, rotate, 2× speed, thumbnail frame,
 - audio: compress, normalize loudness, trim, join,
 - PDF: merge, split into pages, rotate, optimize,
+- images and scanned PDFs: **extract text (OCR)** with the recognizer built into Windows; the text is saved as .txt and copied to the clipboard,
 - anything, folders included: archive to ZIP / TAR.GZ.
+
+Things that aren't files yet (images dragged from a browser, Outlook attachments, screenshots on the clipboard) are saved to **Downloads\FileAction** first, and the results go next to them.
 
 With several files selected, each one is converted separately; tools like “merge” produce a single result.
 

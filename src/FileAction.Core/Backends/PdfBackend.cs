@@ -54,6 +54,23 @@ public static class PdfBackend
         return [folder];
     }
 
+    /// <summary>Renders every page to "page-001.png"… in <paramref name="dir"/> (used for OCR).</summary>
+    public static IReadOnlyList<string> RenderPagesToPng(string pdf, string dir, int dpi, CancellationToken ct)
+    {
+        var bytes = File.ReadAllBytes(pdf);
+        var count = PDFtoImage.Conversion.GetPageCount(bytes);
+        var options = new PDFtoImage.RenderOptions(Dpi: dpi, BackgroundColor: SkiaSharp.SKColors.White, WithAnnotations: true, WithFormFill: true);
+        var pages = new List<string>();
+        for (var i = 0; i < count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var path = Path.Combine(dir, $"page-{i + 1:000}.png");
+            SavePage(path, bytes, i, "png", options, 100);
+            pages.Add(path);
+        }
+        return pages;
+    }
+
     private static void SavePage(string path, byte[] pdf, int page, string format, PDFtoImage.RenderOptions options, int quality)
     {
         using var bitmap = PDFtoImage.Conversion.ToImage(pdf, page, options: options);

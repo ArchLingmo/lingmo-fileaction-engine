@@ -79,6 +79,16 @@ internal sealed class App : Application
         }
 
         _controller = new WheelController(_settings, _tools, jobs, _input);
+        Ocr.OcrOperation.CopyToClipboard = text => Dispatcher.BeginInvoke(() =>
+        {
+            try
+            {
+                Clipboard.SetText(text);
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+            }
+        });
         _tray = CreateTray();
         _hotkey = new HotkeyListener(_controller.OnHotkey);
         ApplyHotkey();
@@ -112,7 +122,7 @@ internal sealed class App : Application
     }
 
     private TrayIcon CreateTray() =>
-        new(OpenSettings, () => ShelfWindow.Open([]), ShowHelp, SetPaused, _settings.Paused, () => Shutdown());
+        new(OpenSettings, () => _controller.OpenForClipboard(), () => ShelfWindow.Open([]), ShowHelp, SetPaused, _settings.Paused, () => Shutdown());
 
     private void HandleArgs(string[] args)
     {
@@ -163,7 +173,7 @@ internal sealed class App : Application
         var hotkey = AppSettings.HotkeyName(_settings.Hotkey);
         var text = T(
             $"""
-            1. Chyťte soubor myší (v Průzkumníku, na ploše, kdekoli).
+            1. Chyťte soubor myší (v Průzkumníku, na ploše, obrázek v prohlížeči, přílohu v Outlooku…).
             2. Během tažení ťukněte na klávesu:
                  {convert} – převést na jiný formát
                  {tools} – nástroje (komprimovat, zmenšit, oříznout, spojit…)
@@ -172,14 +182,14 @@ internal sealed class App : Application
 
             Kolo zůstane otevřené, dokud soubor nepustíte; klávesu můžete pustit a další klávesou přepnout kolo.
 
-            Bez myši: vyberte soubory v Průzkumníku a stiskněte {hotkey}.
+            Bez myši: vyberte soubory v Průzkumníku (nebo zkopírujte soubor či snímek obrazovky) a stiskněte {hotkey}.
             Šipky vyberou výseč, Enter potvrdí, Tab přepne kolo, Esc zavře.
             Také přes pravé tlačítko → „FileAction…“.
 
             Výsledek se uloží vedle původního souboru, originál zůstane beze změny.
             """,
             $"""
-            1. Grab a file with the mouse (in File Explorer, on the desktop, anywhere).
+            1. Grab a file with the mouse (in File Explorer, on the desktop, an image in your browser, an Outlook attachment…).
             2. While dragging, tap a key:
                  {convert} – convert to another format
                  {tools} – tools (compress, shrink, trim, merge…)
@@ -188,7 +198,7 @@ internal sealed class App : Application
 
             The wheel stays open until you drop; you can release the key and tap another one to switch wheels.
 
-            Without the mouse: select files in File Explorer and press {hotkey}.
+            Without the mouse: select files in File Explorer (or copy a file or a screenshot) and press {hotkey}.
             Arrows pick a slice, Enter runs it, Tab switches wheels, Esc closes.
             Also via right-click → “FileAction…”.
 

@@ -18,7 +18,7 @@ internal sealed class WheelController
     private readonly ToolLocator _tools;
     private readonly JobRunner _jobs;
     private readonly GlobalInput _input;
-    private IReadOnlyList<Operation> _coreOperations = Catalog.Build();
+    private IReadOnlyList<Operation> _coreOperations = BuildOperations();
     private IReadOnlyList<Operation> _actions;
     private readonly List<string> _pendingPaths = [];
     private readonly DispatcherTimer _argsTimer;
@@ -61,9 +61,12 @@ internal sealed class WheelController
     public void Relocalize()
     {
         _wheel?.Finish();
-        _coreOperations = Catalog.Build();
+        _coreOperations = BuildOperations();
         _actions = FileActions.Build(_settings, _settings.Save);
     }
+
+    /// <summary>The cross-platform catalog plus tools that need Windows itself (OCR).</summary>
+    public static IReadOnlyList<Operation> BuildOperations() => [.. Catalog.Build(), new Ocr.OcrOperation()];
 
     private IReadOnlyList<Operation> Operations(WheelKind wheel, IReadOnlyList<FileItem> items) =>
         Catalog.For(wheel == WheelKind.Actions ? _actions : _coreOperations, wheel, items, _tools);
@@ -87,7 +90,21 @@ internal sealed class WheelController
         if (paths.Count == 0)
         {
             Notifications.Show(T("Nic není vybráno", "Nothing selected"),
-                T("Vyberte soubory v Průzkumníku (nebo je zkopírujte přes Ctrl+C) a stiskněte zkratku znovu.", "Select files in File Explorer (or copy them with Ctrl+C) and press the shortcut again."));
+                T("Vyberte soubory v Průzkumníku, zkopírujte je (Ctrl+C) nebo pořiďte snímek obrazovky (Win+Shift+S) a stiskněte zkratku znovu.",
+                  "Select files in File Explorer, copy them (Ctrl+C) or take a screenshot (Win+Shift+S), then press the shortcut again."));
+            return;
+        }
+        OpenFor(paths, ExplorerSelection.CursorOrCenter());
+    }
+
+    /// <summary>Opens the wheel for whatever is on the clipboard (tray menu).</summary>
+    public void OpenForClipboard()
+    {
+        var paths = ExplorerSelection.FromClipboard();
+        if (paths.Count == 0)
+        {
+            Notifications.Show(T("Schránka je prázdná", "The clipboard is empty"),
+                T("Zkopírujte soubory nebo obrázek, třeba snímek obrazovky (Win+Shift+S).", "Copy files or an image, e.g. a screenshot (Win+Shift+S)."));
             return;
         }
         OpenFor(paths, ExplorerSelection.CursorOrCenter());

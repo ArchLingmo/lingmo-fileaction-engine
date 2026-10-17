@@ -240,14 +240,6 @@ internal sealed class WheelWindow : Window
         _highlight = -1;
     }
 
-    private static IReadOnlyList<FileItem>? ReadItems(IDataObject data)
-    {
-        if (!data.GetDataPresent(DataFormats.FileDrop))
-            return null;
-        return data.GetData(DataFormats.FileDrop) is string[] paths && paths.Length > 0
-            ? paths.Select(p => new FileItem(p)).ToList()
-            : null;
-    }
 
     // ------------------------------------------------------------------ drag & drop
 
@@ -256,13 +248,13 @@ internal sealed class WheelWindow : Window
         e.Handled = true;
         if (_items.Count == 0)
         {
-            var items = ReadItems(e.Data);
-            if (items is null)
+            var preview = DropContent.Read(e.Data, materialize: false);
+            if (preview is null)
             {
                 e.Effects = DragDropEffects.None;
                 return;
             }
-            _items = items;
+            _items = preview.Items;
             LoadOperations();
             Build();
             AnimateSlicesIn();
@@ -284,15 +276,29 @@ internal sealed class WheelWindow : Window
     private void OnDrop(object sender, DragEventArgs e)
     {
         e.Handled = true;
-        var items = ReadItems(e.Data) ?? _items;
         var index = HitTest(e.GetPosition(_canvas), out _);
         var op = index >= 0 && index < _ops.Count ? _ops[index] : null;
         e.Effects = op is null ? DragDropEffects.None : SafeEffect(e.AllowedEffects);
+        // Virtual files and images can only be read while the drop is in progress.
+        var content = op is null ? null : DropContent.Read(e.Data, materialize: true);
         Finish();
-        if (op is not null && items.Count > 0)
+        if (op is not null && content is { Items.Count: > 0 })
         {
             // Return to the drag source right away; do the work afterwards.
-            Dispatcher.BeginInvoke(() => _execute(op, items));
+            Dispatcher.BeginInvoke(async () =>
+            {
+                try
+                {
+                    if (content.Prepare is not null)
+                        await content.Prepare();
+                }
+                catch (Exception ex)
+                {
+                    Shell.Notifications.Show(T("Stažení se nepovedlo", "Download failed"), ex.Message, error: true);
+                    return;
+                }
+                _execute(op, content.Items);
+            });
         }
     }
 

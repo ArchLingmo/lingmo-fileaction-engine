@@ -19,7 +19,7 @@ Inspirováno skvělou aplikací [Tangerine](https://tangerineformac.com/) pro ma
 
 ## Jak to funguje
 
-1. Chyťte soubor (v Průzkumníku, na ploše, v libovolné aplikaci, která umí přetahovat soubory).
+1. Chyťte soubor: v Průzkumníku, na ploše, obrázek nebo odkaz v prohlížeči, přílohu e-mailu, soubor uvnitř ZIP složky…
 2. Během tažení **ťukněte** na klávesu:
 
    | Klávesa | Kolo | Co nabízí |
@@ -32,7 +32,7 @@ Inspirováno skvělou aplikací [Tangerine](https://tangerineformac.com/) pro ma
 
 Kolo zůstane otevřené, dokud soubor nepustíte. Klávesu tedy můžete pustit a další klávesou přepnout na jiné kolo. Klávesy lze v nastavení přehodit.
 
-**Bez myši:** vyberte soubory v Průzkumníku a stiskněte **Ctrl + Alt + Mezerník**. Šipkami vyberete výseč, Enter potvrdí, Tab přepne kolo, Esc zavře, čísla 1–9 spustí výseč přímo.
+**Bez myši:** vyberte soubory v Průzkumníku, nebo zkopírujte soubor či snímek obrazovky (**Win + Shift + S**), a stiskněte **Ctrl + Alt + Mezerník**. Šipkami vyberete výseč, Enter potvrdí, Tab přepne kolo, Esc zavře, čísla 1–9 spustí výseč přímo.
 Kolo otevřete i přes **pravé tlačítko → FileAction…** (ve Windows 11 pod „Zobrazit další možnosti“).
 
 Průběh převodu se ukazuje v rohu obrazovky. Odtud jde výsledek otevřít, ukázat ve složce nebo převod zrušit.
@@ -56,7 +56,10 @@ Průběh převodu se ukazuje v rohu obrazovky. Odtud jde výsledek otevřít, uk
 - video: komprimovat (H.264), 720p, ztlumit, oříznout podle času, otočit, zrychlit 2×, náhledový snímek,
 - audio: komprimovat, normalizovat hlasitost, oříznout, spojit,
 - PDF: spojit, rozdělit po stranách, otočit, optimalizovat,
+- obrázky a naskenovaná PDF: **text z obrázku (OCR)** pomocí rozpoznávání vestavěného ve Windows; text se uloží jako .txt a zkopíruje do schránky,
 - cokoli včetně složek: zabalit do ZIP / TAR.GZ.
+
+Co ještě není soubor (obrázek přetažený z prohlížeče, příloha z Outlooku, snímek obrazovky ve schránce), se nejdřív uloží do **Stažené soubory\FileAction** a výsledky vzniknou vedle něj.
 
 U více vybraných souborů se převede každý zvlášť. Nástroje typu „spojit“ vytvoří jeden výsledek.
 

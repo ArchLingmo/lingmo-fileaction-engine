@@ -196,7 +196,7 @@ internal sealed class JobCard : Border
         _fill.Width = _bar.ActualWidth * _value;
     }
 
-    public void Complete(IReadOnlyList<string> outputs, string? warning)
+    public void Complete(IReadOnlyList<string> outputs, string? warning, string? note = null)
     {
         _done = true;
         SetFull(warning is null ? Theme.Success : Theme.Error);
@@ -204,6 +204,8 @@ internal sealed class JobCard : Border
         _status.Visibility = Visibility.Visible;
         _status.Foreground = warning is null ? Theme.Muted : Theme.Error;
         _status.Text = warning ?? (outputs.Count == 1 ? T("Hotovo: ", "Done: ") + System.IO.Path.GetFileName(outputs[0]) : T($"Hotovo: {outputs.Count} výstupů", $"Done: {outputs.Count} outputs"));
+        if (warning is null && note is not null)
+            _status.Text += Environment.NewLine + note;
         _buttons.Children.Clear();
         if (outputs.Count > 0)
         {

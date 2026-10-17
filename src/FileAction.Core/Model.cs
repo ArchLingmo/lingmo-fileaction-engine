@@ -33,7 +33,9 @@ public sealed record FileItem(string Path)
 /// <summary>A value the user is asked for before an operation runs (e.g. trim start/end).</summary>
 public sealed record ParameterSpec(string Key, string Label, string DefaultValue, string? Hint = null);
 
-public sealed record OperationResult(IReadOnlyList<string> Outputs, string? Message = null)
+/// <param name="Message">A warning (e.g. some files of a batch failed).</param>
+/// <param name="Note">Extra information for the user, e.g. "text copied to the clipboard".</param>
+public sealed record OperationResult(IReadOnlyList<string> Outputs, string? Message = null, string? Note = null)
 {
     public static OperationResult Of(IEnumerable<string> outputs) => new(outputs.ToList());
 }

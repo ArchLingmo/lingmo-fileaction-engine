@@ -10,10 +10,11 @@ internal sealed class TrayIcon : IDisposable
     private readonly Forms.NotifyIcon _icon;
     private readonly Forms.ToolStripMenuItem _pause;
 
-    public TrayIcon(Action openSettings, Action openShelf, Action showHelp, Action<bool> setPaused, bool paused, Action exit)
+    public TrayIcon(Action openSettings, Action openClipboard, Action openShelf, Action showHelp, Action<bool> setPaused, bool paused, Action exit)
     {
         var stream = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Assets/FileAction.ico"))!.Stream;
         var menu = new Forms.ContextMenuStrip();
+        menu.Items.Add(T("Kolo pro schránku", "Wheel for the clipboard"), null, (_, _) => openClipboard());
         menu.Items.Add(T("Nastavení…", "Settings…"), null, (_, _) => openSettings());
         menu.Items.Add(T("Prázdný plovoucí panel", "Empty floating shelf"), null, (_, _) => openShelf());
         menu.Items.Add(T("Jak to funguje", "How it works"), null, (_, _) => showHelp());
