@@ -2,7 +2,7 @@
 
 🇬🇧 [English](README.md) · 🇨🇿 **Čeština**
 
-**Převod souborů bez klikání pro Windows.** Chyťte soubor myší, během tažení ťukněte na klávesu a pusťte ho na formát v kruhovém menu. Vše běží lokálně, žádné soubory se nikam neodesílají.
+**Převod souborů bez klikání pro Windows (a Linux).** Chyťte soubor myší, během tažení ťukněte na klávesu a pusťte ho na formát v kruhovém menu. Vše běží lokálně, žádné soubory se nikam neodesílají.
 
 Inspirováno skvělou aplikací [Tangerine](https://tangerineformac.com/) pro macOS. FileAction s ní není nijak spojený, jde o nezávislou obdobu pro Windows.
 
@@ -88,6 +88,29 @@ Při prvním spuštění se FileAction zapíše do automatického spouštění a
 
 Požadavky: Windows 10 (1809+) nebo Windows 11, x64.
 
+## Linux
+
+```sh
+yay -S fileaction-bin        # Arch Linux (AUR)
+```
+
+Ostatní distribuce: stáhněte `FileAction-x.y.z-linux-x64.tar.gz` z [Releases](../../releases), rozbalte a spusťte `fileaction/app/fileaction` (.NET není potřeba).
+
+Linux aplikacím nedovolí sledovat klávesnici a myš jiných programů (Wayland to záměrně zakazuje), takže gesto „táhnu a ťuknu na klávesu“ je jen pro Windows. Na Linuxu se stejné kolo používá takto:
+
+- **Kolo pro přetahování:** spusťte `fileaction` (nebo *FileAction* z nabídky aplikací) a přetáhněte na kolo soubory. Zůstane na obrazovce, posunout ho jde za střed.
+- **Pravé tlačítko ve správci souborů:** `fileaction integrate` přidá *FileAction…* do Nautilu (podnabídka *Skripty*), Dolphinu a Nema (balíček z AUR instaluje Dolphin a Nemo pro všechny).
+- **Příkazová řádka** a klávesové zkratky prostředí:
+
+  ```sh
+  fileaction foto.heic                        # kolo pro tento soubor
+  fileaction list foto.heic                   # co se s ním dá dělat
+  fileaction run image.to.webp *.heic         # provést, bez okna
+  fileaction run video.trim klip.mov --param start=0:10 --param end=0:25
+  ```
+
+Volitelné balíčky: `ffmpeg` (audio, video), `pandoc-cli` (dokumenty), `libreoffice-fresh` (Office), `tesseract` + `tesseract-data-ces` (text z obrázku). Nastavení je v `~/.config/fileaction/settings.json`.
+
 ## Sestavení ze zdrojů
 
 ```powershell
@@ -105,12 +128,15 @@ publish\FileAction.exe
 
 Pošlete do `main` commit, jehož zpráva začíná `Release v1.2.3` (nebo pushněte tag `v1.2.3`, případně ručně spusťte workflow **Build** s číslem verze). CI sestaví instalátor a zip a zveřejní je jako vydání na GitHubu. Když do repozitáře přidáte secret `RELEASE_TOKEN` (osobní přístupový token s oprávněním *Contents: read and write* k tomuto repozitáři), vydání se zveřejní pod vaším účtem místo github-actions.
 
+Stejný běh sestaví i balíček pro Linux, na Arch Linuxu ho zkušebně nainstaluje a když secret `AUR_SSH_PRIVATE_KEY` obsahuje klíč účtu AUR, který spravuje `fileaction-bin`, nahraje nový PKGBUILD do AUR.
+
 ## Struktura
 
 ```
 src/FileAction.Core     převody a nástroje (multiplatformní knihovna, testovaná i na Linuxu)
   Backends/             ImageMagick, FFmpeg, Pandoc, LibreOffice, PDF, tabulky, titulky, archivy
   Operations/Catalog.cs seznam všech výsečí na kolech „Převést“ a „Nástroje“
+src/FileAction.Linux    aplikace pro Linux (Avalonia): kolo pro přetahování, příkazová řádka, napojení na správce souborů
 src/FileAction.App      aplikace pro Windows (WPF)
   Input/GlobalInput.cs  globální sledování myši a kláves (gesto „táhnu + ťuknu“)
   Wheel/                kruhové menu a logika, kdy se otevře
@@ -119,6 +145,7 @@ src/FileAction.App      aplikace pro Windows (WPF)
   Shell/                ikona v oznamovací oblasti, zkratka, kontextová nabídka, jediná instance
 tests/FileAction.Tests  jednotkové testy a integrační testy, které spustí každý převod na vzorových souborech
 installer/              Inno Setup
+packaging/              balíček pro Linux a šablona PKGBUILD pro AUR
 ```
 
 ## Rozdíly oproti Tangerine

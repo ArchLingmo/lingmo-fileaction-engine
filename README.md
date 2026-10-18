@@ -2,7 +2,7 @@
 
 🇬🇧 **English** · 🇨🇿 [Čeština](README.cs.md)
 
-**Click-free file conversion for Windows.** Grab a file, tap a key while dragging, and drop it on a format in a radial wheel. Everything runs locally; your files never leave your PC.
+**Click-free file conversion for Windows (and Linux).** Grab a file, tap a key while dragging, and drop it on a format in a radial wheel. Everything runs locally; your files never leave your PC.
 
 Inspired by the wonderful [Tangerine](https://tangerineformac.com/) for macOS. FileAction is an independent Windows take on the idea and is not affiliated with Tangerine.
 
@@ -88,6 +88,29 @@ On first launch FileAction adds itself to startup and to the File Explorer conte
 
 Requirements: Windows 10 (1809+) or Windows 11, x64.
 
+## Linux
+
+```sh
+yay -S fileaction-bin        # Arch Linux (AUR)
+```
+
+Other distributions: download `FileAction-x.y.z-linux-x64.tar.gz` from [Releases](../../releases), unpack it and run `fileaction/app/fileaction` (no .NET needed).
+
+Linux doesn't let apps watch the keyboard and mouse of other programs (Wayland forbids it on purpose), so the "drag and tap a key" gesture is Windows-only. On Linux you use the same wheel like this:
+
+- **Drop zone:** run `fileaction` (or *FileAction* from the app menu) and drag files onto the wheel. It stays on screen; move it by its middle.
+- **Right-click in the file manager:** `fileaction integrate` adds *FileAction…* to Nautilus (*Scripts* submenu), Dolphin and Nemo (the AUR package installs Dolphin and Nemo for everyone).
+- **Command line** and keyboard shortcuts of your desktop:
+
+  ```sh
+  fileaction photo.heic                       # the wheel for this file
+  fileaction list photo.heic                  # what can be done with it
+  fileaction run image.to.webp *.heic         # do it, no window
+  fileaction run video.trim clip.mov --param start=0:10 --param end=0:25
+  ```
+
+Optional packages: `ffmpeg` (audio, video), `pandoc-cli` (documents), `libreoffice-fresh` (Office files), `tesseract` + `tesseract-data-eng` (extract text). Settings live in `~/.config/fileaction/settings.json`.
+
 ## Build from source
 
 ```powershell
@@ -105,6 +128,8 @@ publish\FileAction.exe
 
 Push a commit to `main` whose message starts with `Release v1.2.3` (or push a `v1.2.3` tag, or run the **Build** workflow manually with a version). CI builds the installer and zip and publishes them as a GitHub release. Add a repository secret `RELEASE_TOKEN` (a fine-grained personal access token with *Contents: read and write* on this repository) to publish releases under your own account instead of github-actions.
 
+The same run builds the Linux tarball, installs the AUR package on Arch Linux to test it and, when the `AUR_SSH_PRIVATE_KEY` secret holds the key of the AUR account that maintains `fileaction-bin`, pushes the updated PKGBUILD to the AUR.
+
 ## Project layout
 
 ```
@@ -112,6 +137,7 @@ src/FileAction.Core     conversions and tools (cross-platform library, also test
   Backends/             ImageMagick, FFmpeg, Pandoc, LibreOffice, PDF, spreadsheets, subtitles, archives
   Operations/Catalog.cs every slice on the Convert and Tools wheels
   Loc.cs                English / Czech strings
+src/FileAction.Linux    the Linux app (Avalonia): drop zone, wheel, CLI, file manager integration
 src/FileAction.App      the Windows app (WPF)
   Input/GlobalInput.cs  global mouse and keyboard hooks (the “drag + tap” gesture)
   Wheel/                the radial menu and when it opens
@@ -120,6 +146,7 @@ src/FileAction.App      the Windows app (WPF)
   Shell/                tray icon, hotkey, context menu, single instance
 tests/FileAction.Tests  unit tests plus integration tests that run every operation on sample files
 installer/              Inno Setup
+packaging/              Linux tarball and the AUR PKGBUILD template
 ```
 
 ## Differences from Tangerine

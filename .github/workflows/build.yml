@@ -16,6 +16,34 @@ permissions:
   contents: write
 
 jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - id: v
+        env:
+          RELEASE: ${{ github.event.inputs.release }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          # A push to main whose commit message starts with "Release v1.2.3" publishes that version,
+          # as does a v1.2.3 tag or a manual run with a version.
+          release="${RELEASE#v}"
+          first_line="$(printf '%s\n' "$COMMIT_MESSAGE" | head -n1)"
+          if [ -z "$release" ] && [ "$GITHUB_REF" = refs/heads/main ] && [[ "$first_line" =~ ^Release\ v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            release="${BASH_REMATCH[1]}"
+          fi
+          if [ -z "$release" ] && [ "$GITHUB_REF_TYPE" = tag ]; then release="${GITHUB_REF_NAME#v}"; fi
+          if [ -n "$release" ]; then
+            echo "version=$release" >> "$GITHUB_OUTPUT"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
   core-tests-linux:
     name: Core tests (Linux, with ffmpeg/pandoc/LibreOffice)
     runs-on: ubuntu-latest
@@ -33,28 +61,15 @@ jobs:
 
   windows:
     name: Windows build, tests and installer
+    needs: version
     runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-
-      - name: Version
-        shell: pwsh
-        env:
-          RELEASE: ${{ github.event.inputs.release }}
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-        run: |
-          # A push to main whose commit message starts with "Release v1.2.3" publishes that version.
-          if (-not $env:RELEASE -and $env:GITHUB_REF -eq 'refs/heads/main' -and $env:COMMIT_MESSAGE -match '^Release v(\d+\.\d+\.\d+)') {
-            $env:RELEASE = $Matches[1]
-          }
-          if ($env:RELEASE -or $env:GITHUB_REF_TYPE -eq 'tag') { "PUBLISH=true" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
-          $v = if ($env:RELEASE) { $env:RELEASE.TrimStart('v') }
-               elseif ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') }
-               else { "1.0.$($env:GITHUB_RUN_NUMBER)" }
-          "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Download ffmpeg and pandoc
         shell: pwsh
@@ -120,7 +135,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FileAction-${{ env.VERSION }}-windows
+          name: FileAction-windows
           path: artifacts/*
 
       - uses: actions/upload-artifact@v4
@@ -129,25 +144,120 @@ jobs:
           name: ui-previews
           path: self-test
 
+  linux:
+    name: Linux build and package
+    needs: version
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish
+        run: dotnet publish src/FileAction.Linux/FileAction.Linux.csproj -c Release -r linux-x64 --self-contained -p:Version=$VERSION -o publish-linux
+      - name: Self-test and command line
+        run: |
+          ./publish-linux/fileaction --version
+          ./publish-linux/fileaction --self-test self-test-linux
+          cat self-test-linux/self-test.txt
+          cp self-test-linux/en/wheel-actions.png /tmp/sample.png
+          ./publish-linux/fileaction list /tmp/sample.png
+          ./publish-linux/fileaction run image.to.jpg /tmp/sample.png
+          test -s /tmp/sample.jpg
+      - name: Package
+        run: |
+          packaging/make-linux-package.sh "$VERSION" publish-linux dist
+          ls -la dist
+          du -sh publish-linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FileAction-linux
+          path: dist/*
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-previews-linux
+          path: self-test-linux
+
+  arch:
+    name: Arch Linux package (makepkg, install, run)
+    needs: [version, linux]
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: FileAction-linux
+          path: dist
+      - name: Build and install with makepkg
+        run: |
+          pacman -Syu --noconfirm --needed base-devel
+          useradd -m builder
+          mkdir -p /build
+          cp dist/*.tar.gz /build/
+          tarball="$(basename dist/*.tar.gz)"
+          # Same PKGBUILD as on the AUR, but taking the tarball from this run instead of the release.
+          sed "s|^source=.*|source=(\"$tarball\")|" dist/PKGBUILD > /build/PKGBUILD
+          chown -R builder /build
+          (source /build/PKGBUILD && pacman -S --noconfirm --needed "${depends[@]}")
+          su builder -c "cd /build && makepkg --noconfirm"
+          pacman -U --noconfirm /build/fileaction-bin-*.pkg.tar.zst
+      - name: Run the installed app
+        run: |
+          fileaction --version
+          test -f /usr/share/applications/fileaction.desktop
+          test -f /usr/share/kio/servicemenus/fileaction.desktop
+          su builder -c "fileaction --self-test /tmp/arch-self-test" && cat /tmp/arch-self-test/self-test.txt
+          su builder -c "cp /tmp/arch-self-test/en/wheel-image-convert.png /tmp/sample.png && fileaction run image.to.webp /tmp/sample.png && test -s /tmp/sample.webp"
+      - name: AUR metadata
+        run: |
+          mkdir -p aur
+          cp dist/PKGBUILD aur/
+          chown -R builder aur
+          su builder -c "cd aur && makepkg --printsrcinfo > .SRCINFO"
+          cat aur/PKGBUILD aur/.SRCINFO
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aur
+          path: aur
+          include-hidden-files: true
+
+  release:
+    name: Publish release
+    needs: [version, windows, linux, arch]
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: FileAction-windows
+          path: artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: FileAction-linux
+          path: linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: aur
+          path: aur
       - name: Replace an existing release of this version
-        if: env.PUBLISH == 'true'
-        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           # GitHub keeps the original author when a release is updated, so a re-release deletes it first.
-          if (-not $env:GH_TOKEN) { Write-Host "No RELEASE_TOKEN secret: publishing as github-actions."; exit 0 }
-          Write-Host "Publishing as $(gh api user -q .login)"
-          gh release view "v$env:VERSION" -R $env:GITHUB_REPOSITORY *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release delete "v$env:VERSION" -R $env:GITHUB_REPOSITORY --yes --cleanup-tag
-            if ($LASTEXITCODE -ne 0) { throw "Could not delete the existing release v$env:VERSION" }
-            Write-Host "Deleted the existing release v$env:VERSION"
-          }
-          exit 0
-
+          if [ -z "$GH_TOKEN" ]; then echo "No RELEASE_TOKEN secret: publishing as github-actions."; exit 0; fi
+          echo "Publishing as $(gh api user -q .login)"
+          if gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release delete "v$VERSION" -R "$GITHUB_REPOSITORY" --yes --cleanup-tag
+            echo "Deleted the existing release v$VERSION"
+          fi
       - name: Release
-        if: env.PUBLISH == 'true'
         uses: softprops/action-gh-release@v2
         with:
           # With a RELEASE_TOKEN secret (a personal access token) the release is published under that
@@ -157,4 +267,25 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: FileAction ${{ env.VERSION }}
           generate_release_notes: true
-          files: artifacts/*
+          files: |
+            artifacts/*
+            linux/*.tar.gz
+      - name: Publish to the AUR
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          # Needs an AUR account whose SSH public key matches the AUR_SSH_PRIVATE_KEY secret.
+          if [ -z "$AUR_SSH_PRIVATE_KEY" ]; then echo "No AUR_SSH_PRIVATE_KEY secret: skipping the AUR."; exit 0; fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan -t ed25519,rsa aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes"
+          git clone ssh://aur@aur.archlinux.org/fileaction-bin.git aur-repo
+          cp aur/PKGBUILD aur/.SRCINFO aur-repo/
+          cd aur-repo
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then echo "AUR is already up to date."; exit 0; fi
+          git -c user.name="${{ github.repository_owner }}" -c user.email="${{ github.repository_owner }}@users.noreply.github.com" \
+            commit -m "Update to $VERSION"
+          git push origin HEAD:master
