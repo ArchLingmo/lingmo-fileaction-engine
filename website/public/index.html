@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en" data-lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FileAction: convert files by dropping them on a wheel</title>
+  <meta name="description" content="Grab a file, tap Shift while dragging and drop it on a format. Free, open-source file conversion for Windows and Linux. Images, video, audio, PDF, documents, spreadsheets. Everything runs locally.">
+  <meta name="theme-color" content="#0c0c11">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="FileAction: drop a file on the wheel, get it converted">
+  <meta property="og:description" content="Grab a file, tap Shift while dragging, drop it on a format. Free and open source for Windows and Linux. Everything runs locally.">
+  <meta property="og:image" content="https://raw.githubusercontent.com/Metamorfolog/file_action/main/website/public/assets/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/Metamorfolog/file_action/main/website/public/assets/og.png">
+  <link rel="stylesheet" href="style.css">
+  <script src="main.js" defer></script>
+</head>
+<body>
+  <div class="glow" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="brand" href="#top" aria-label="FileAction">
+      <img src="assets/icon.png" alt="" width="32" height="32">
+      <span>FileAction</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#how"><span data-l="en">How it works</span><span data-l="cs">Jak to funguje</span></a>
+      <a href="#formats"><span data-l="en">Formats</span><span data-l="cs">Formáty</span></a>
+      <a href="#linux">Linux</a>
+      <a href="https://github.com/Metamorfolog/file_action" rel="noopener">GitHub</a>
+    </nav>
+    <div class="nav-end">
+      <button class="lang" type="button" id="lang-toggle" aria-label="Switch language / Přepnout jazyk">
+        <span data-l="en">CZ</span><span data-l="cs">EN</span>
+      </button>
+      <a class="btn btn-small" href="#download"><span data-l="en">Download</span><span data-l="cs">Stáhnout</span></a>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-copy">
+        <a class="pill" href="#download" id="release-pill">
+          <span class="pill-dot"></span>
+          <span><span class="js-version">v1.4.0</span> · <span data-l="en">now under 50 MB</span><span data-l="cs">teď pod 50 MB</span></span>
+        </a>
+        <h1>
+          <span data-l="en">Drop a file on the wheel.<br><span class="grad">Get it converted.</span></span>
+          <span data-l="cs">Pusť soubor na kolo.<br><span class="grad">A je převedený.</span></span>
+        </h1>
+        <p class="lead">
+          <span data-l="en">Grab a file, tap <kbd>Shift</kbd> while dragging and drop it on <b>JPG</b>, <b>MP4</b> or <b>PDF</b>. No upload sites, no apps to open, no menus. Free and open source for Windows and Linux.</span>
+          <span data-l="cs">Chyťte soubor, při tažení ťukněte na <kbd>Shift</kbd> a pusťte ho na <b>JPG</b>, <b>MP4</b> nebo <b>PDF</b>. Žádné převodníky na webu, žádné otevírání aplikací, žádné nabídky. Zdarma a open source pro Windows i Linux.</span>
+        </p>
+        <div class="cta">
+          <a class="btn btn-primary js-dl-primary" href="https://github.com/Metamorfolog/file_action/releases/download/v1.4.0/FileAction-Setup-1.4.0.exe">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.1 10.4 4v7.1H3V5.1Zm8.3-1.2L21 2.5v8.6h-9.7V3.9ZM3 12h7.4v7.1L3 18v-6Zm8.3 0H21v8.6l-9.7-1.4V12Z"/></svg>
+            <span class="js-dl-primary-label"><span data-l="en">Download for Windows</span><span data-l="cs">Stáhnout pro Windows</span></span>
+          </a>
+          <a class="btn btn-ghost" href="#download"><span data-l="en">All downloads</span><span data-l="cs">Všechny verze</span></a>
+        </div>
+        <p class="meta js-dl-meta">
+          <span data-l="en">Installer <b class="js-size-setup">48 MB</b> · Windows 10 &amp; 11 · no admin rights · MIT license</span>
+          <span data-l="cs">Instalátor <b class="js-size-setup">48 MB</b> · Windows 10 a 11 · bez práv správce · licence MIT</span>
+        </p>
+      </div>
+
+      <div class="hero-demo">
+        <div class="stage" id="stage" role="img" aria-label="Animation: a file is dragged, Shift is tapped, a wheel of formats opens and the file is dropped on a format">
+          <div class="desk-file" id="desk-file" aria-hidden="true">
+            <div class="doc"><span id="desk-ext">HEIC</span></div>
+            <span class="desk-name" id="desk-name">holiday.heic</span>
+          </div>
+          <svg class="wheel" id="wheel" viewBox="0 0 400 400" aria-hidden="true"></svg>
+          <div class="chip" id="chip" aria-hidden="true">
+            <div class="doc doc-small"><span id="chip-ext">HEIC</span></div>
+          </div>
+          <svg class="cursor" id="cursor" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 2.5v17.2l4.6-4.4 3 6.7 3-1.4-3-6.6h6.4L5 2.5Z"/></svg>
+          <div class="keycap" id="keycap" aria-hidden="true"><span id="keycap-label">Shift</span></div>
+          <div class="toast" id="toast" aria-hidden="true">
+            <div class="toast-icon">
+              <svg viewBox="0 0 24 24"><path d="M9.5 16.2 5.3 12l-1.4 1.4 5.6 5.6 11-11-1.4-1.4-9.6 9.6Z"/></svg>
+            </div>
+            <div class="toast-body">
+              <b id="toast-name">holiday.webp</b>
+              <div class="bar"><i id="toast-bar"></i></div>
+            </div>
+          </div>
+        </div>
+        <p class="demo-caption" id="demo-caption"></p>
+      </div>
+    </section>
+
+    <!-- Numbers -->
+    <section class="stats" aria-label="Highlights">
+      <div><b>48 MB</b><span data-l="en">installer</span><span data-l="cs">instalátor</span></div>
+      <div><b>0 B</b><span data-l="en">uploaded, ever</span><span data-l="cs">nahráno na internet</span></div>
+      <div><b>60+</b><span data-l="en">formats &amp; tools</span><span data-l="cs">formátů a nástrojů</span></div>
+      <div><b>2</b><span data-l="en">platforms: Windows &amp; Linux</span><span data-l="cs">platformy: Windows a Linux</span></div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section" id="how">
+      <h2><span data-l="en">Three keys. Three wheels.</span><span data-l="cs">Tři klávesy. Tři kola.</span></h2>
+      <p class="section-lead">
+        <span data-l="en">Drag a file from File Explorer, the desktop, your browser or an e-mail. While you're dragging, tap a key and the wheel appears under your cursor. Drop on a slice. The result lands next to the original, and the original is never touched.</span>
+        <span data-l="cs">Táhněte soubor z Průzkumníku, plochy, prohlížeče nebo e-mailu. Během tažení ťukněte na klávesu a pod kurzorem se objeví kolo. Pusťte ho na výseč. Výsledek se uloží vedle originálu, originál zůstane netknutý.</span>
+      </p>
+
+      <div class="wheels">
+        <article class="wheel-card">
+          <div class="shot">
+            <img data-l="en" src="assets/screens/convert-en.webp" alt="Convert wheel for a video: MP4, MKV, WEBM, GIF, MP3" width="663" height="663" loading="lazy">
+            <img data-l="cs" src="assets/screens/convert-cs.webp" alt="Kolo Převést pro video: MP4, MKV, WEBM, GIF, MP3" width="663" height="663" loading="lazy">
+          </div>
+          <div class="wheel-text">
+            <kbd class="big">Shift</kbd>
+            <h3><span data-l="en">Convert</span><span data-l="cs">Převést</span></h3>
+            <p><span data-l="en">HEIC to JPG, MOV to MP4, DOCX to PDF, XLSX to CSV. The wheel only shows formats that make sense for the file you're holding.</span><span data-l="cs">HEIC na JPG, MOV na MP4, DOCX na PDF, XLSX na CSV. Kolo nabízí jen formáty, které pro daný soubor dávají smysl.</span></p>
+          </div>
+        </article>
+        <article class="wheel-card">
+          <div class="shot">
+            <img data-l="en" src="assets/screens/tools-en.webp" alt="Tools wheel for an image: compress, shrink, rotate, text (OCR)…" width="663" height="663" loading="lazy">
+            <img data-l="cs" src="assets/screens/tools-cs.webp" alt="Kolo Nástroje pro obrázek: zmenšit, otočit, text (OCR)…" width="663" height="663" loading="lazy">
+          </div>
+          <div class="wheel-text">
+            <kbd class="big">Ctrl</kbd>
+            <h3><span data-l="en">Tools</span><span data-l="cs">Nástroje</span></h3>
+            <p><span data-l="en">Compress a video for e-mail, trim a song, merge PDFs, strip GPS from photos, pull text out of a screenshot with OCR.</span><span data-l="cs">Zmenšit video do e-mailu, zkrátit písničku, spojit PDF, smazat GPS z fotek, vytáhnout text ze snímku obrazovky pomocí OCR.</span></p>
+          </div>
+        </article>
+        <article class="wheel-card">
+          <div class="shot">
+            <img data-l="en" src="assets/screens/actions-en.webp" alt="Actions wheel: copy to, move to, copy path, terminal, shelf, share" width="663" height="663" loading="lazy">
+            <img data-l="cs" src="assets/screens/actions-cs.webp" alt="Kolo Akce: kopírovat do, přesunout do, cesta, terminál, polička, sdílet" width="663" height="663" loading="lazy">
+          </div>
+          <div class="wheel-text">
+            <kbd class="big">Alt</kbd>
+            <h3><span data-l="en">Actions</span><span data-l="cs">Akce</span></h3>
+            <p><span data-l="en">Copy or move to your favourite folders, copy the path, open a terminal there, park files on a floating shelf, or share them.</span><span data-l="cs">Kopírovat nebo přesunout do oblíbených složek, zkopírovat cestu, otevřít tam terminál, odložit soubory na plovoucí poličku, nebo je sdílet.</span></p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="section">
+      <h2><span data-l="en">Small touches that add up</span><span data-l="cs">Drobnosti, které dělají rozdíl</span></h2>
+      <div class="features">
+        <div class="feature">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm-3 8V7a3 3 0 1 1 6 0v3H9Z"/></svg>
+          <h3><span data-l="en">100% local</span><span data-l="cs">Všechno lokálně</span></h3>
+          <p><span data-l="en">Your files never leave your computer. No account, no tracking, no cloud.</span><span data-l="cs">Soubory nikdy neopustí váš počítač. Žádný účet, žádné sledování, žádný cloud.</span></p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.8-4.2L13 11h7V4l-2.3 2.3Z"/></svg>
+          <h3><span data-l="en">Repeat the last one</span><span data-l="cs">Zopakovat poslední</span></h3>
+          <p><span data-l="en">Tap the same key twice and the wheel becomes one big slice: the action you just did, with the same settings.</span><span data-l="cs">Ťukněte dvakrát na stejnou klávesu a kolo se změní v jednu velkou výseč: to, co jste dělali naposledy, se stejným nastavením.</span></p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 17.3 6.2 3.7-1.6-7 5.4-4.7-7.2-.6L12 2 9.2 8.7 2 9.3l5.4 4.7-1.6 7L12 17.3Z"/></svg>
+          <h3><span data-l="en">Your own wheel</span><span data-l="cs">Vlastní kolo</span></h3>
+          <p><span data-l="en">Star the slices you use every day so they're always in the same place, hide the ones you never touch.</span><span data-l="cs">Označte hvězdičkou výseče, které používáte denně, ať jsou vždy na stejném místě, a skryjte ty, které nepotřebujete.</span></p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm-9 3h2v2h-2V8Zm0 3h2v2h-2v-2ZM8 8h2v2H8V8Zm0 3h2v2H8v-2Zm-1 2H5v-2h2v2Zm0-3H5V8h2v2Zm9 7H8v-2h8v2Zm0-4h-2v-2h2v2Zm0-3h-2V8h2v2Zm3 3h-2v-2h2v2Zm0-3h-2V8h2v2Z"/></svg>
+          <h3><span data-l="en">No mouse needed</span><span data-l="cs">I bez myši</span></h3>
+          <p><span data-l="en">Select files in Explorer or copy a screenshot, press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd>, pick with the arrow keys.</span><span data-l="cs">Označte soubory v Průzkumníku nebo zkopírujte snímek obrazovky, stiskněte <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Mezerník</kbd> a vyberte šipkami.</span></p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v12H5.2L3 18.2V4Zm2 2v7.4l.4-.4H19V6H5Zm2 2h10v2H7V8Z"/></svg>
+          <h3><span data-l="en">From anywhere</span><span data-l="cs">Odkudkoli</span></h3>
+          <p><span data-l="en">Images straight from the browser, Outlook attachments, files inside ZIPs, clipboard screenshots.</span><span data-l="cs">Obrázky přímo z prohlížeče, přílohy z Outlooku, soubory uvnitř ZIPu, snímky ze schránky.</span></p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.6l3.3-3.3 1.4 1.4L11 17.4l-5.7-5.7 1.4-1.4 3.3 3.3V3h2Zm-8 16h16v2H4v-2Z"/></svg>
+          <h3><span data-l="en">Updates itself</span><span data-l="cs">Aktualizuje se sám</span></h3>
+          <p><span data-l="en">New versions install quietly in the background after a checksum check. Video and document tools download only when you first need them.</span><span data-l="cs">Nové verze se po ověření otisku tiše nainstalují na pozadí. Nástroje pro video a dokumenty se stáhnou, až je poprvé budete potřebovat.</span></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Formats -->
+    <section class="section" id="formats">
+      <h2><span data-l="en">What it converts</span><span data-l="cs">Co umí převést</span></h2>
+      <div class="formats">
+        <div class="fmt"><h3><span data-l="en">Images</span><span data-l="cs">Obrázky</span></h3><p>JPG · PNG · WebP · HEIC · AVIF · TIFF · BMP · GIF · ICO · SVG <span class="to">→</span> JPG · PNG · WebP · AVIF · TIFF · ICO · PDF</p></div>
+        <div class="fmt"><h3>Video</h3><p>MP4 · MOV · MKV · WebM · AVI · WMV · FLV · MPG · 3GP · TS <span class="to">→</span> MP4 · MOV · MKV · WebM · GIF · MP3</p></div>
+        <div class="fmt"><h3>Audio</h3><p>MP3 · M4A · AAC · WAV · FLAC · OGG · Opus · AIFF · WMA <span class="to">→</span> MP3 · M4A · WAV · FLAC · OGG · Opus · AIFF</p></div>
+        <div class="fmt"><h3>PDF</h3><p>PDF <span class="to">→</span> DOCX · JPG · PNG · PPTX · TXT · MD · HTML · EPUB</p></div>
+        <div class="fmt"><h3><span data-l="en">Documents</span><span data-l="cs">Dokumenty</span></h3><p>DOCX · DOC · ODT · RTF · MD · TXT · HTML · EPUB <span class="to">→</span> DOCX · PDF · ODT · MD · HTML · TXT · EPUB · RTF</p></div>
+        <div class="fmt"><h3><span data-l="en">Slides</span><span data-l="cs">Prezentace</span></h3><p>PPTX · PPT · ODP <span class="to">→</span> PDF · PNG · JPG · PPTX · ODP</p></div>
+        <div class="fmt"><h3><span data-l="en">Spreadsheets</span><span data-l="cs">Tabulky</span></h3><p>XLSX · XLS · ODS · CSV · TSV <span class="to">→</span> XLSX · CSV · TSV · ODS · PDF</p></div>
+        <div class="fmt"><h3><span data-l="en">Subtitles &amp; archives</span><span data-l="cs">Titulky a archivy</span></h3><p>SRT · VTT · ZIP · TAR · GZ · RAR · 7z <span class="to">→</span> <span data-l="en">extract</span><span data-l="cs">rozbalit</span> · ZIP · TAR.GZ</p></div>
+      </div>
+    </section>
+
+    <!-- Linux -->
+    <section class="section split" id="linux">
+      <div>
+        <h2><span data-l="en">On Linux too</span><span data-l="cs">I na Linuxu</span></h2>
+        <p class="section-lead">
+          <span data-l="en">The same wheel as a drop zone you drag files onto, a <b>FileAction…</b> item in the right-click menu of Nautilus, Dolphin and Nemo, and a command line for scripts and keyboard shortcuts.</span>
+          <span data-l="cs">Stejné kolo jako zóna, na kterou soubory přetáhnete, položka <b>FileAction…</b> v pravém tlačítku v Nautilu, Dolphinu a Nemu, a příkazová řádka pro skripty a klávesové zkratky.</span>
+        </p>
+        <p class="note">
+          <span data-l="en">Arch Linux: download the <a class="js-dl-pkgbuild" href="https://github.com/Metamorfolog/file_action/releases/download/v1.4.0/PKGBUILD">PKGBUILD</a> and run <code>makepkg -si</code>. Everyone else: unpack the <a class="js-dl-linux" href="https://github.com/Metamorfolog/file_action/releases/download/v1.4.0/FileAction-1.4.0-linux-x64.tar.xz">tarball</a> and run it. No .NET needed.</span>
+          <span data-l="cs">Arch Linux: stáhněte <a class="js-dl-pkgbuild" href="https://github.com/Metamorfolog/file_action/releases/download/v1.4.0/PKGBUILD">PKGBUILD</a> a spusťte <code>makepkg -si</code>. Ostatní: rozbalte <a class="js-dl-linux" href="https://github.com/Metamorfolog/file_action/releases/download/v1.4.0/FileAction-1.4.0-linux-x64.tar.xz">archiv</a> a spusťte. .NET není potřeba.</span>
+        </p>
+      </div>
+      <pre class="terminal" aria-label="Terminal example"><span class="t-bar"><i></i><i></i><i></i></span><code><span class="c"># the wheel for this file</span>
+<span class="p">$</span> fileaction photo.heic
+
+<span class="c"># what can be done with it</span>
+<span class="p">$</span> fileaction list photo.heic
+
+<span class="c"># do it, no window</span>
+<span class="p">$</span> fileaction run image.to.webp *.heic
+<span class="o">✓ photo.webp</span>
+
+<span class="p">$</span> fileaction run video.trim clip.mov \
+    --param start=0:10 --param end=0:25</code></pre>
+    </section>
+
+    <!-- Download -->
+    <section class="section" id="download">
+      <h2><span data-l="en">Get FileAction</span><span data-l="cs">Stáhnout FileAction</span></h2>
+      <p class="section-lead center">
+        <span data-l="en">Free and open source under the MIT license. Latest version: <b class="js-version">v1.4.0</b>.</span>
+        <span data-l="cs">Zdarma a open source pod licencí MIT. Nejnovější verze: <b class="js-version">v1.4.0</b>.</span>
+      </p>
+      <div class="downloads">
+        <a class="dl dl-main js-dl-setup" href="https://github.com/Metamorfolog/file_action/releases/download/v1.4.0/FileAction-Setup-1.4.0.exe">
+          <svg class="dl-os" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.1 10.4 4v7.1H3V5.1Zm8.3-1.2L21 2.5v8.6h-9.7V3.9ZM3 12h7.4v7.1L3 18v-6Zm8.3 0H21v8.6l-9.7-1.4V12Z"/></svg>
+          <span class="dl-title"><span data-l="en">Windows installer</span><span data-l="cs">Instalátor pro Windows</span></span>
+          <span class="dl-sub"><span data-l="en">Recommended · updates itself</span><span data-l="cs">Doporučeno · aktualizuje se sám</span></span>
+          <span class="dl-size js-size-setup">48 MB</span>
+        </a>
+        <a class="dl js-dl-zip" href="https://github.com/Metamorfolog/file_action/releases/download/v1.4.0/FileAction-1.4.0-win-x64.zip">
+          <svg class="dl-os" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.1 10.4 4v7.1H3V5.1Zm8.3-1.2L21 2.5v8.6h-9.7V3.9ZM3 12h7.4v7.1L3 18v-6Zm8.3 0H21v8.6l-9.7-1.4V12Z"/></svg>
+          <span class="dl-title"><span data-l="en">Windows portable</span><span data-l="cs">Windows přenosná</span></span>
+          <span class="dl-sub"><span data-l="en">.zip, no install</span><span data-l="cs">.zip bez instalace</span></span>
+          <span class="dl-size js-size-zip">63 MB</span>
+        </a>
+        <a class="dl js-dl-linux" href="https://github.com/Metamorfolog/file_action/releases/download/v1.4.0/FileAction-1.4.0-linux-x64.tar.xz">
+          <svg class="dl-os" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c-2.2 0-3.6 1.8-3.6 4.4 0 1.5.3 2.4-.6 3.9-1 1.6-2.7 3.4-2.7 6 0 .7.1 1.2.4 1.7-.8.4-1.7.8-1.7 1.6 0 1.1 1.7 1 3 1.3 1 .2 1.9 1.1 2.9 1.1.9 0 1.4-.6 2.3-.6s1.4.6 2.3.6c1 0 1.9-.9 2.9-1.1 1.3-.3 3-.2 3-1.3 0-.8-.9-1.2-1.7-1.6.3-.5.4-1 .4-1.7 0-2.6-1.7-4.4-2.7-6-.9-1.5-.6-2.4-.6-3.9C15.6 3.8 14.2 2 12 2Zm-1.6 4.3c.5 0 .8.5.8 1.1 0 .3-.1.5-.2.7l-.6-.2c.1-.1.1-.3.1-.5 0-.3-.1-.5-.2-.5s-.3.2-.3.5v.2l-.6-.3c0-.6.4-1 1-1Zm3.2 0c.6 0 1 .5 1 1.1v.3l-.6.1V7.5c0-.3-.2-.6-.4-.6s-.4.3-.4.6v.2l-.5-.2c0-.7.4-1.2.9-1.2ZM12 8.6c.8 0 1.9.5 1.9.9 0 .5-1.2 1.1-1.9 1.1s-1.9-.6-1.9-1.1c0-.4 1.1-.9 1.9-.9Z"/></svg>
+          <span class="dl-title">Linux x64</span>
+          <span class="dl-sub"><span data-l="en">.tar.xz, any distribution</span><span data-l="cs">.tar.xz, libovolná distribuce</span></span>
+          <span class="dl-size js-size-linux">32 MB</span>
+        </a>
+        <a class="dl js-dl-pkgbuild" href="https://github.com/Metamorfolog/file_action/releases/download/v1.4.0/PKGBUILD">
+          <svg class="dl-os" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c-.9 2.2-1.4 3.6-2.4 5.7.6.6 1.4 1.4 2.6 2.2-1.3-.5-2.2-1.1-2.9-1.7C7.9 11.1 6 14.8 2 22c3.1-1.8 5.6-2.9 7.9-3.3-.1-.4-.2-.9-.2-1.4v-.1c.1-2 1.1-3.6 2.3-3.5 1.2.1 2.1 1.8 2 3.8 0 .4-.1.8-.2 1.2 2.3.4 4.7 1.6 7.7 3.3-.6-1.1-1.1-2.1-1.6-3-.8-.6-1.6-1.4-3.3-2.3 1.2.3 2 .7 2.7 1.1C16 11.5 14.7 7.4 12 2Z"/></svg>
+          <span class="dl-title">Arch Linux</span>
+          <span class="dl-sub">PKGBUILD · <code>makepkg -si</code></span>
+          <span class="dl-size">fileaction-bin</span>
+        </a>
+      </div>
+      <p class="small center">
+        <span data-l="en">Windows 10 (1809+) or 11, x64. The first audio, video or document conversion downloads FFmpeg (34 MB) or Pandoc (35 MB) after asking you. <a href="https://github.com/Metamorfolog/file_action/releases">All releases</a></span>
+        <span data-l="cs">Windows 10 (1809+) nebo 11, x64. První převod audia, videa nebo dokumentu se vás zeptá a stáhne FFmpeg (34 MB) nebo Pandoc (35 MB). <a href="https://github.com/Metamorfolog/file_action/releases">Všechna vydání</a></span>
+      </p>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section faq">
+      <h2>FAQ</h2>
+      <details>
+        <summary><span data-l="en">Is it really free?</span><span data-l="cs">Je to opravdu zdarma?</span></summary>
+        <p><span data-l="en">Yes. FileAction is open source under the MIT license. No ads, no account, no "pro" version.</span><span data-l="cs">Ano. FileAction je open source pod licencí MIT. Žádné reklamy, žádný účet, žádná „pro“ verze.</span></p>
+      </details>
+      <details>
+        <summary><span data-l="en">Does it upload my files anywhere?</span><span data-l="cs">Nahrává moje soubory někam?</span></summary>
+        <p><span data-l="en">No. Every conversion runs on your computer. The only network requests are the update check (it asks GitHub for the latest version) and the one-time download of FFmpeg or Pandoc when you first need them.</span><span data-l="cs">Ne. Každý převod běží na vašem počítači. Jediné síťové požadavky jsou kontrola aktualizací (dotaz na GitHub na nejnovější verzi) a jednorázové stažení FFmpeg nebo Pandoc, když je poprvé potřebujete.</span></p>
+      </details>
+      <details>
+        <summary><span data-l="en">Windows says the publisher is unknown</span><span data-l="cs">Windows hlásí neznámého vydavatele</span></summary>
+        <p><span data-l="en">The installer isn't code-signed yet (certificates are expensive for a free project). Click <i>More info → Run anyway</i>. You can check the build yourself: every release is built by GitHub Actions from the public source.</span><span data-l="cs">Instalátor zatím není digitálně podepsaný (certifikát je pro bezplatný projekt drahý). Klikněte na <i>Další informace → Přesto spustit</i>. Sestavení si můžete ověřit: každé vydání sestavuje GitHub Actions z veřejného zdrojového kódu.</span></p>
+      </details>
+      <details>
+        <summary><span data-l="en">Is this Tangerine for Windows?</span><span data-l="cs">Je to Tangerine pro Windows?</span></summary>
+        <p><span data-l="en">It's inspired by the wonderful <a href="https://tangerineformac.com/" rel="noopener">Tangerine</a> for macOS, but it's an independent project and not affiliated with it. On a Mac, use Tangerine.</span><span data-l="cs">Je inspirovaný skvělou aplikací <a href="https://tangerineformac.com/" rel="noopener">Tangerine</a> pro macOS, ale jde o nezávislý projekt, který s ní není spojený. Na Macu použijte Tangerine.</span></p>
+      </details>
+      <details>
+        <summary><span data-l="en">Why doesn't the drag-and-tap gesture work on Linux?</span><span data-l="cs">Proč na Linuxu nefunguje gesto „táhnu a ťuknu“?</span></summary>
+        <p><span data-l="en">Linux desktops (Wayland in particular) don't let apps watch the keyboard and mouse of other programs. That's a good thing for security, so on Linux you drop files onto the wheel, use the right-click menu or the command line instead.</span><span data-l="cs">Linuxová prostředí (hlavně Wayland) nedovolí aplikacím sledovat klávesnici a myš jiných programů. Pro bezpečnost je to dobře, takže na Linuxu soubory pustíte přímo na kolo, použijete pravé tlačítko nebo příkazovou řádku.</span></p>
+      </details>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="brand">
+      <img src="assets/icon.png" alt="" width="24" height="24">
+      <span>FileAction</span>
+    </div>
+    <p>
+      <span data-l="en">Made by <a href="https://github.com/Metamorfolog">Metamorfolog</a> · MIT license · Inspired by Tangerine, not affiliated.</span>
+      <span data-l="cs">Vytvořil <a href="https://github.com/Metamorfolog">Metamorfolog</a> · licence MIT · Inspirováno Tangerine, bez spojení s ní.</span>
+    </p>
+    <a href="https://github.com/Metamorfolog/file_action" rel="noopener"><span data-l="en">Source code on GitHub</span><span data-l="cs">Zdrojový kód na GitHubu</span></a>
+  </footer>
+</body>
+</html>

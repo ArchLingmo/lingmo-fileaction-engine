@@ -1,0 +1,21 @@
+# Serves website/public with automatic HTTPS (Let's Encrypt, falling back to ZeroSSL).
+# SITE_ADDRESS is set by up.sh: <server-ip>.sslip.io, or your own domain.
+{$SITE_ADDRESS} {
+	root * /srv
+	encode zstd gzip
+	file_server
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src https://api.github.com; frame-ancestors 'none'; base-uri 'self'"
+		-Server
+	}
+
+	@static path /assets/* /favicon.png
+	header @static Cache-Control "public, max-age=604800"
+
+	@pages path / /index.html /style.css /main.js
+	header @pages Cache-Control "public, max-age=300"
+}

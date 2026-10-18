@@ -143,6 +143,7 @@ src/FileAction.App      aplikace pro Windows (WPF)
 tests/FileAction.Tests  jednotkové testy a integrační testy, které spustí každý převod na vzorových souborech
 installer/              Inno Setup
 packaging/              balíček pro Linux a šablona PKGBUILD pro AUR
+website/                webová stránka projektu (statická) a její nasazení přes Caddy
 ```
 
 ## Licence

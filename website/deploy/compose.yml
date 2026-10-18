@@ -1,0 +1,21 @@
+# The FileAction website: Caddy serving ../public with automatic HTTPS.
+# Start it with ./up.sh (it works out the address); `git pull` updates the page, no restart needed.
+services:
+  web:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?run ./up.sh or set SITE_ADDRESS}
+    volumes:
+      - ../public:/srv:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -144,6 +144,7 @@ src/FileAction.App      the Windows app (WPF)
 tests/FileAction.Tests  unit tests plus integration tests that run every operation on sample files
 installer/              Inno Setup
 packaging/              Linux tarball and the AUR PKGBUILD template
+website/                the project page (static) and its Caddy deployment
 ```
 
 ## License
