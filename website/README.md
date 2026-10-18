@@ -8,7 +8,7 @@ Copy `public/` to any static web server; no build step or server-side code is ne
 
 ## Edit it
 
-- `public/index.html`: all the text, in English and Czech (`data-l="en"` / `data-l="cs"`). The visitor's browser language picks one, and the CZ/EN button switches.
+- `public/index.html`: all the text, in English and Czech (`data-l="en"` / `data-l="cs"`). English is the default; the CZ/EN button switches and remembers the choice, and `?lang=cs` opens the Czech version.
 - `public/main.js`: the language switch, the release links and the animated wheel in the hero. `scenes` lists the files and slices the animation plays.
 - `public/style.css`: the dark theme, with the same orange-to-coral accent as the app.
 - `public/assets/og.png`: the preview image for Twitter and other link previews (1200×630). The page loads it from raw.githubusercontent.com, so it works on any domain.

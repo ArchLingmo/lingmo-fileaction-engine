@@ -14,8 +14,7 @@
     set(key, value) { try { localStorage.setItem(key, value); } catch { /* private mode */ } },
   };
   const params = new URLSearchParams(location.search);
-  let lang = params.get("lang") || store.get("lang") ||
-    ((navigator.languages || [navigator.language]).some(l => /^(cs|sk)\b/i.test(l || "")) ? "cs" : "en");
+  let lang = params.get("lang") || store.get("lang") || "en";
   const setLang = value => {
     lang = value === "cs" ? "cs" : "en";
     root.dataset.lang = lang;
