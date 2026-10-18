@@ -24,15 +24,16 @@ internal sealed class WheelEditorWindow : Window
     /// <summary>File types shown as groups, with sample names used to find which slices apply.</summary>
     private static (string Czech, string English, string Glyph, string[] Samples)[] Groups =>
     [
-        ("Obrázky", "Images", Glyphs.Photo, ["a.jpg", "a.gif"]),
-        ("Video", "Video", Glyphs.Video, ["a.mp4"]),
-        ("Audio", "Audio", Glyphs.Audio, ["a.mp3"]),
+        // Two formats per group, so "convert to X" shows up even when one sample already is X.
+        ("Obrázky", "Images", Glyphs.Photo, ["a.png", "a.jpg", "a.gif"]),
+        ("Video", "Video", Glyphs.Video, ["a.mp4", "a.mov"]),
+        ("Audio", "Audio", Glyphs.Audio, ["a.mp3", "a.wav"]),
         ("PDF", "PDF", Glyphs.Page, ["a.pdf"]),
         ("Dokumenty", "Documents", Glyphs.Document, ["a.docx", "a.md"]),
-        ("Prezentace", "Slides", Glyphs.Page, ["a.pptx"]),
+        ("Prezentace", "Slides", Glyphs.Page, ["a.pptx", "a.odp"]),
         ("Tabulky", "Spreadsheets", Glyphs.Table, ["a.xlsx", "a.csv"]),
-        ("Titulky", "Subtitles", Glyphs.Subtitles, ["a.srt"]),
-        ("Archivy", "Archives", Glyphs.Pack, ["a.zip"]),
+        ("Titulky", "Subtitles", Glyphs.Subtitles, ["a.srt", "a.vtt"]),
+        ("Archivy", "Archives", Glyphs.Pack, ["a.zip", "a.tar"]),
     ];
 
     internal WheelEditorWindow(AppSettings settings, IReadOnlyList<Operation> operations, Action changed)
