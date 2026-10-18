@@ -93,34 +93,75 @@
   }
 
   // ---------- Wheel demo ----------
+  // Geometry, colours and labels follow the app's wheel (src/FileAction.App/Wheel/WheelWindow.cs).
   const SVG = "http://www.w3.org/2000/svg";
-  const C = 200, R = 182, r = 78, HUB = 70;
+  const OUTER = 196, INNER = 80, RIM = 9, GAP = 6, CORNER = 11, POP = 7, PAD = 16;
+  const VB = 2 * (OUTER + RIM + PAD), C = VB / 2;
+  const LABEL_R = INNER + (OUTER - INNER) * 0.54;
   const KEYS = ["Shift", "Ctrl", "Alt"];
+  const WHEEL_NAMES = { Shift: { en: "Convert", cs: "Převést" }, Ctrl: { en: "Tools", cs: "Nástroje" }, Alt: { en: "Actions", cs: "Akce" } };
+
+  // Line icons standing in for the app's Segoe Fluent glyphs.
+  const ICONS = {
+    shrink: "M14 10l6-6M14 10h4.5M14 10V5.5M10 14l-6 6M10 14H5.5M10 14v4.5",
+    rotate: "M12 4.5a7.5 7.5 0 1 1-6.8 4.4M5 4v5h5",
+    palette: "M12 3.5a8.5 8.5 0 0 0 0 17c1.3 0 1.9-1 1.4-2.1-.6-1.3.3-2.6 1.7-2.6h2.2a3.2 3.2 0 0 0 3.2-3.2c0-5.2-3.8-9.1-8.5-9.1ZM8 10.5h.01M11 7.5h.01M15 8.5h.01",
+    text: "M5 6h14M12 6v12M9 18h6",
+    clear: "M6.5 6.5l11 11M17.5 6.5l-11 11",
+    copy: "M9 8.5h10v12H9zM6 16.5H5v-12h10v1",
+    move: "M3.5 6.5h5.5l2 2h9.5v11h-17zM11 14h6M14.5 11.5 17 14l-2.5 2.5",
+    link: "M10.5 13.5a3.8 3.8 0 0 1 0-5.4l2.2-2.2a3.8 3.8 0 0 1 5.4 5.4l-1.1 1.1M13.5 10.5a3.8 3.8 0 0 1 0 5.4l-2.2 2.2a3.8 3.8 0 0 1-5.4-5.4l1.1-1.1",
+    terminal: "M4 5h16v14H4zM7.5 10l2.5 2-2.5 2M12 14.5h4",
+    pin: "M14.5 3.5l6 6-2.8 1.2-3.7 3.7.6 3.8-1.8 1.3-3.5-3.5L4.5 20.5M9.3 16l-5.3-5.3 1.3-1.8 3.8.6 3.7-3.7z",
+    share: "M14 5l6 5.5-6 5.5v-3c-4.5 0-7.5 1.5-10 5 .8-5.5 4-8.8 10-9.5z",
+  };
+
+  const L = (en, cs = en) => ({ en, cs });
+  const slice = (label, sub, icon) => ({
+    label: typeof label === "string" ? L(label) : label,
+    sub: typeof sub === "string" ? L(sub) : sub,
+    icon,
+  });
 
   const scenes = [
     {
       file: "holiday.heic", ext: "HEIC", key: "Shift", target: 2, out: "holiday.webp",
-      slices: [["JPG"], ["PNG"], ["WEBP"], ["AVIF"], ["PDF"], ["TIFF"]],
+      slices: [slice("JPG"), slice("PNG"), slice("WEBP"), slice("AVIF"), slice("PDF"), slice("TIFF")],
       caption: { en: "<kbd>Shift</kbd> Convert: a HEIC photo to WebP", cs: "<kbd>Shift</kbd> Převést: fotka HEIC na WebP" },
     },
     {
       file: "clip.mov", ext: "MOV", key: "Shift", target: 3, out: "clip.gif",
-      slices: [["MP4"], ["MKV"], ["WEBM"], ["GIF", "animation", "animace"], ["MP3", "audio only", "jen zvuk"]],
+      slices: [slice("MP4"), slice("MKV"), slice("WEBM"), slice("GIF", L("animation", "animace")), slice("MP3", L("audio only", "jen zvuk"))],
       caption: { en: "<kbd>Shift</kbd> Convert: a screen recording to GIF", cs: "<kbd>Shift</kbd> Převést: záznam obrazovky na GIF" },
     },
     {
-      file: "scan.png", ext: "PNG", key: "Ctrl", target: 4, out: "scan.txt",
-      slices: [["Compress", "smaller file", "menší soubor", "Zmenšit"], ["1920 px", "max size", "max. velikost"], ["Rotate", "90°", "90°", "Otočit"], ["Mono", "grayscale", "odstíny šedi"], ["Text", "OCR", "OCR"], ["No GPS", "strip metadata", "bez metadat", "Bez GPS"]],
+      file: "scan.png", ext: "PNG", key: "Ctrl", target: 5, out: "scan.txt",
+      slices: [
+        slice(L("Compress", "Komprimovat"), null, "shrink"),
+        slice(L("Shrink", "Zmenšit"), "50 %", "shrink"),
+        slice("Max 1920 px", L("for web", "na web"), "shrink"),
+        slice(L("Rotate", "Otočit"), L("right", "doprava"), "rotate"),
+        slice(L("Grayscale", "Černobíle"), null, "palette"),
+        slice(L("Extract text", "Text z obrázku"), "OCR", "text"),
+        slice(L("No metadata", "Bez metadat"), "GPS, EXIF", "clear"),
+      ],
       caption: { en: "<kbd>Ctrl</kbd> Tools: read the text out of a scan (OCR)", cs: "<kbd>Ctrl</kbd> Nástroje: přečíst text ze skenu (OCR)" },
     },
     {
       file: "contract.docx", ext: "DOCX", key: "Shift", target: 0, out: "contract.pdf",
-      slices: [["PDF"], ["ODT"], ["MD", "Markdown", "Markdown"], ["HTML"], ["TXT"], ["EPUB"]],
+      slices: [slice("PDF", L("document", "dokument")), slice("ODT"), slice("MD", "Markdown"), slice("HTML"), slice("TXT"), slice("EPUB")],
       caption: { en: "<kbd>Shift</kbd> Convert: a Word document to PDF", cs: "<kbd>Shift</kbd> Převést: dokument Wordu do PDF" },
     },
     {
       file: "invoice.pdf", ext: "PDF", key: "Alt", target: 1, out: "Invoices / invoice.pdf",
-      slices: [["Copy to", "Documents", "Dokumenty", "Kopírovat"], ["Move to", "Invoices", "Faktury", "Přesunout"], ["Path", "copy", "kopírovat", "Cesta"], ["Terminal", "open here", "otevřít zde", "Terminál"], ["Shelf", "park it", "odložit", "Polička"], ["Share", "nearby", "nablízko", "Sdílet"]],
+      slices: [
+        slice(L("Copy", "Kopírovat"), L("to folder…", "do složky…"), "copy"),
+        slice(L("Move", "Přesunout"), L("to folder…", "do složky…"), "move"),
+        slice(L("Copy path", "Kopírovat cestu"), null, "link"),
+        slice(L("Terminal", "Terminál"), L("open here", "otevřít zde"), "terminal"),
+        slice(L("Float", "Plovoucí panel"), L("keep for later", "odložit na později"), "pin"),
+        slice(L("Share", "Sdílet"), "Windows", "share"),
+      ],
       caption: { en: "<kbd>Alt</kbd> Actions: move a file to a favourite folder", cs: "<kbd>Alt</kbd> Akce: přesunout soubor do oblíbené složky" },
     },
   ];
@@ -144,63 +185,145 @@
     if (parent) parent.appendChild(node);
     return node;
   };
+  // 0° is straight up and angles grow clockwise, as in the app.
   const polar = (radius, deg) => {
     const a = (deg * Math.PI) / 180;
-    return [C + radius * Math.cos(a), C + radius * Math.sin(a)];
+    return [C + radius * Math.sin(a), C - radius * Math.cos(a)];
   };
-  const sliceAngle = (i, n) => -90 + (360 / n) * i;
+  const pt = (radius, deg) => polar(radius, deg).map(v => v.toFixed(2)).join(",");
+  const rad = deg => (deg * Math.PI) / 180;
+  const deg = r => (r * 180) / Math.PI;
+
+  // A ring segment with a constant-width gap to its neighbours and rounded corners.
+  function sector(a0, a1) {
+    const edge = (r, a, side) => a + side * deg(Math.asin(GAP / 2 / r));
+    const outerStart = edge(OUTER, a0, 1), outerEnd = edge(OUTER, a1, -1);
+    const innerStart = edge(INNER, a0, 1), innerEnd = edge(INNER, a1, -1);
+    const cOut = Math.min(CORNER, rad(outerEnd - outerStart) * OUTER * 0.45);
+    const cIn = Math.min(CORNER * 0.7, rad(innerEnd - innerStart) * INNER * 0.45);
+    const dOut = deg(cOut / OUTER), dIn = deg(cIn / INNER);
+    const largeOut = outerEnd - outerStart - 2 * dOut > 180 ? 1 : 0;
+    const largeIn = innerEnd - innerStart - 2 * dIn > 180 ? 1 : 0;
+    return [
+      `M${pt(OUTER, outerStart + dOut)}`,
+      `A${OUTER},${OUTER} 0 ${largeOut} 1 ${pt(OUTER, outerEnd - dOut)}`,
+      `Q${pt(OUTER, outerEnd)} ${pt(OUTER - cOut, edge(OUTER - cOut, a1, -1))}`,
+      `L${pt(INNER + cIn, edge(INNER + cIn, a1, -1))}`,
+      `Q${pt(INNER, innerEnd)} ${pt(INNER, innerEnd - dIn)}`,
+      `A${INNER},${INNER} 0 ${largeIn} 0 ${pt(INNER, innerStart + dIn)}`,
+      `Q${pt(INNER, innerStart)} ${pt(INNER + cIn, edge(INNER + cIn, a0, 1))}`,
+      `L${pt(OUTER - cOut, edge(OUTER - cOut, a0, 1))}`,
+      `Q${pt(OUTER, outerStart)} ${pt(OUTER, outerStart + dOut)}Z`,
+    ].join("");
+  }
+
+  // Formats on the Convert wheel are big and bare; everything else gets an icon.
+  const isFormat = s => !s.icon;
+
+  function sliceLabel(group, s, mid, width) {
+    const sub = s.sub && s.sub[lang];
+    const parts = [];
+    if (s.icon) parts.push({ h: 20 + 5 });
+    parts.push({ h: isFormat(s) ? 23 : 16 });
+    if (sub) parts.push({ h: 14 });
+    const total = parts.reduce((sum, p) => sum + p.h, 0);
+    const [mx, my] = polar(LABEL_R, mid);
+    const g = el("g", { class: "label-box" }, group);
+    let y = my - total / 2;
+    if (s.icon) {
+      el("path", { class: "icon", d: ICONS[s.icon], transform: `translate(${mx - 10} ${y}) scale(${20 / 24})` }, g);
+      y += 25;
+    }
+    const h = isFormat(s) ? 23 : 16;
+    el("text", { class: isFormat(s) ? "label fmt" : "label", x: mx, y: y + h / 2 }, g).textContent = s.label[lang];
+    y += h;
+    if (sub) el("text", { class: "sub", x: mx, y: y + 7.5 }, g).textContent = sub;
+    // Shrink a label that is wider than its slice instead of spilling into the neighbours.
+    const box = g.getBBox();
+    if (box.width > width) {
+      const k = width / box.width;
+      g.setAttribute("transform", `translate(${mx} ${my}) scale(${k}) translate(${-mx} ${-my})`);
+    }
+  }
+
+  function hubText(scene) {
+    const hot = scene.slices[scene.hot];
+    scene.hubTitle.textContent = hot ? hot.label[lang] : WHEEL_NAMES[scene.key][lang];
+    scene.hubDetail.textContent = (hot && hot.sub && hot.sub[lang]) || scene.file;
+  }
 
   function drawWheel(scene) {
     wheel.textContent = "";
+    wheel.setAttribute("viewBox", `0 0 ${VB} ${VB}`);
     const defs = el("defs", {}, wheel);
     const grad = el("linearGradient", { id: "hot", x1: "0", y1: "0", x2: "1", y2: "1" }, defs);
     el("stop", { offset: "0", "stop-color": "#ff8a1f" }, grad);
     el("stop", { offset: "1", "stop-color": "#ff4f6a" }, grad);
-    const glow = el("filter", { id: "glow", x: "-30%", y: "-30%", width: "160%", height: "160%" }, defs);
-    el("feDropShadow", { dx: "0", dy: "0", stdDeviation: "9", "flood-color": "#ff8a1f", "flood-opacity": "0.7" }, glow);
+    const glow = el("filter", { id: "glow", x: "-40%", y: "-40%", width: "180%", height: "180%" }, defs);
+    el("feDropShadow", { dx: "0", dy: "0", stdDeviation: "9", "flood-color": "#ff8a1f", "flood-opacity": "0.75" }, glow);
+    const shadow = el("filter", { id: "shadow", x: "-20%", y: "-20%", width: "140%", height: "140%" }, defs);
+    el("feDropShadow", { dx: "0", dy: "3", stdDeviation: "11", "flood-color": "#000", "flood-opacity": "0.55" }, shadow);
+    const hubShadow = el("filter", { id: "hub-shadow", x: "-30%", y: "-30%", width: "160%", height: "160%" }, defs);
+    el("feDropShadow", { dx: "0", dy: "3", stdDeviation: "5", "flood-color": "#000", "flood-opacity": "0.55" }, hubShadow);
 
-    el("circle", { cx: C, cy: C, r: R + 10, fill: "rgba(22,22,27,0.94)", stroke: "rgba(255,255,255,0.08)" }, wheel);
+    el("circle", { class: "backdrop", cx: C, cy: C, r: OUTER + RIM }, wheel);
     const n = scene.slices.length;
     const step = 360 / n;
-    scene.paths = [];
-    scene.slices.forEach(([label, subEn, subCs, labelCs], i) => {
-      const mid = sliceAngle(i, n);
-      const a0 = mid - step / 2, a1 = mid + step / 2;
-      const [x0, y0] = polar(R, a0), [x1, y1] = polar(R, a1);
-      const [x2, y2] = polar(r, a1), [x3, y3] = polar(r, a0);
-      const large = step > 180 ? 1 : 0;
-      const path = el("path", {
-        class: "slice",
-        d: `M${x0},${y0} A${R},${R} 0 ${large} 1 ${x1},${y1} L${x2},${y2} A${r},${r} 0 ${large} 0 ${x3},${y3} Z`,
-      }, wheel);
-      scene.paths.push(path);
-      const [lx, ly] = polar((R + r) / 2 + 4, mid);
-      const sub = lang === "cs" ? subCs : subEn;
-      const text = el("text", { class: "label", x: lx, y: sub ? ly - 8 : ly }, wheel);
-      text.textContent = (lang === "cs" && labelCs) || label;
-      if (sub) el("text", { class: "sub", x: lx, y: ly + 13 }, wheel).textContent = sub;
+    const width = n <= 2 ? 120 : Math.min(110, Math.max(48, 2 * LABEL_R * Math.sin(rad(step / 2)) * 0.84));
+    scene.hot = -1;
+    scene.groups = scene.slices.map((s, i) => {
+      const mid = i * step;
+      const pop = el("g", { class: "pop" }, wheel);
+      pop.dataset.dx = (POP * Math.sin(rad(mid))).toFixed(2);
+      pop.dataset.dy = (-POP * Math.cos(rad(mid))).toFixed(2);
+      const grow = el("g", { class: "grow", style: `transition-delay: ${14 * i}ms` }, pop);
+      el("path", { class: "slice", d: sector(mid - step / 2, mid + step / 2) }, grow);
+      sliceLabel(grow, s, mid, width);
+      return pop;
     });
-    el("circle", { class: "hub-ring", cx: C, cy: C, r: HUB + 7 }, wheel);
-    el("circle", { class: "hub", cx: C, cy: C, r: HUB }, wheel);
-    el("text", { class: "hub-fmt", x: C, y: C - 12 }, wheel).textContent = scene.ext;
-    el("text", { class: "hub-name", x: C, y: C + 6 }, wheel).textContent = scene.file;
+
+    el("circle", { class: "hub", cx: C, cy: C, r: INNER - 6 }, wheel);
+    // File icon, then the title, the detail line and the wheel keys, as in the app's hub.
+    const doc = el("g", { class: "hub-doc", transform: `translate(${C - 13} ${C - 50})` }, wheel);
+    el("path", { class: "doc-page", d: "M3 0h14l9 9v21a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2Z" }, doc);
+    el("path", { class: "doc-fold", d: "M17 0v7a2 2 0 0 0 2 2h7Z" }, doc);
+    el("rect", { class: "doc-badge", x: 4, y: 18, width: 18, height: 9, rx: 2 }, doc);
+    scene.hubTitle = el("text", { class: "hub-title", x: C, y: C - 3 }, wheel);
+    scene.hubDetail = el("text", { class: "hub-detail", x: C, y: C + 15 }, wheel);
+    hubText(scene);
+
+    const tabW = KEYS.map(k => k.length * 6.4 + 14);
+    const trackW = tabW.reduce((a, b) => a + b, 0) + 4;
+    let x = C - trackW / 2;
+    el("rect", { class: "track", x, y: C + 30, width: trackW, height: 22, rx: 10 }, wheel);
+    x += 2;
     KEYS.forEach((key, i) => {
-      const x = C - 38 + i * 38;
       const on = key === scene.key;
-      el("rect", { class: on ? "key-on" : "key-bg", x: x - 17, y: C + 20, width: 34, height: 17, rx: 8.5 }, wheel);
-      el("text", { class: on ? "key on" : "key", x, y: C + 29 }, wheel).textContent = key;
+      if (on) el("rect", { class: "tab-on", x, y: C + 32, width: tabW[i], height: 18, rx: 8 }, wheel);
+      el("text", { class: on ? "tab on" : "tab", x: x + tabW[i] / 2, y: C + 41.5 }, wheel).textContent = key;
+      x += tabW[i];
     });
+  }
+
+  function setHot(scene, index) {
+    scene.groups.forEach((g, i) => {
+      const on = i === index;
+      g.classList.toggle("hot", on);
+      g.style.transform = on && scene.groups.length > 1 ? `translate(${g.dataset.dx}px, ${g.dataset.dy}px)` : "";
+    });
+    scene.hot = index;
+    hubText(scene);
   }
 
   // Positions are in stage pixels; the wheel covers 82% of the stage, centred.
   function stagePoint(svgX, svgY) {
     const size = stage.clientWidth;
-    const scale = (size * 0.82) / 400;
+    const scale = (size * 0.82) / VB;
     return [size * 0.09 + svgX * scale, size * 0.09 + svgY * scale];
   }
   // Just below the target slice's label, so the label stays readable under the cursor.
   function dropPoint(scene) {
-    const [x, y] = stagePoint(...polar((R + r) / 2 + 4, sliceAngle(scene.target, scene.slices.length)));
+    const [x, y] = stagePoint(...polar(LABEL_R, scene.target * (360 / scene.slices.length)));
     return [x - 6, y + stage.clientWidth * 0.045];
   }
   const place = (node, [x, y]) => { node.style.transform = `translate(${x}px, ${y}px)`; };
@@ -266,13 +389,12 @@
     await wait(260); if (!alive()) return;
     keycap.classList.remove("down");
 
-    const n = scene.slices.length;
     const target = dropPoint(scene);
     await wait(350); if (!alive()) return;
     place(chip, target);
     place(cursor, target);
     await wait(480); if (!alive()) return;
-    scene.paths[scene.target].classList.add("hot");
+    setHot(scene, scene.target);
     await wait(650); if (!alive()) return;
 
     chip.classList.add("gone");
@@ -296,7 +418,7 @@
     renderCaption();
     drawWheel(scene);
     wheel.classList.add("open");
-    scene.paths[scene.target].classList.add("hot");
+    setHot(scene, scene.target);
     const target = dropPoint(scene);
     chip.classList.add("held");
     place(chip, target);
@@ -318,10 +440,10 @@
 
   // Redraw the wheel labels when the language changes mid-scene.
   $("#lang-toggle").addEventListener("click", () => {
-    const hot = current.paths?.findIndex(p => p.classList.contains("hot"));
+    const hot = current.hot ?? -1;
     const open = wheel.classList.contains("open");
     drawWheel(current);
-    if (hot >= 0) current.paths[hot].classList.add("hot");
+    if (hot >= 0) setHot(current, hot);
     if (open) wheel.classList.add("open");
   });
 
