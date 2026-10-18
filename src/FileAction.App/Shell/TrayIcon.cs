@@ -9,6 +9,8 @@ internal sealed class TrayIcon : IDisposable
 {
     private readonly Forms.NotifyIcon _icon;
     private readonly Forms.ToolStripMenuItem _pause;
+    private Forms.ToolStripMenuItem? _update;
+    private Action? _balloonClick;
 
     public TrayIcon(Action openSettings, Action openClipboard, Action openShelf, Action showHelp, Action<bool> setPaused, bool paused, Action exit)
     {
@@ -32,6 +34,13 @@ internal sealed class TrayIcon : IDisposable
             Visible = true,
         };
         _icon.DoubleClick += (_, _) => openSettings();
+        _icon.BalloonTipClicked += (_, _) =>
+        {
+            var action = _balloonClick;
+            _balloonClick = null;
+            action?.Invoke();
+        };
+        _icon.BalloonTipClosed += (_, _) => _balloonClick = null;
         Notifications.Sink = Show;
     }
 
@@ -40,8 +49,25 @@ internal sealed class TrayIcon : IDisposable
         set => _pause.Checked = value;
     }
 
+    /// <summary>Adds "Update to x.y.z" at the top of the menu and announces it once.</summary>
+    public void OfferUpdate(Version version, Action install)
+    {
+        var text = T($"Aktualizovat na verzi {version}", $"Update to version {version}");
+        if (_update is null)
+        {
+            _update = new Forms.ToolStripMenuItem(text) { Font = new System.Drawing.Font(_icon.ContextMenuStrip!.Font, System.Drawing.FontStyle.Bold) };
+            _update.Click += (_, _) => install();
+            _icon.ContextMenuStrip.Items.Insert(0, _update);
+            _icon.ContextMenuStrip.Items.Insert(1, new Forms.ToolStripSeparator());
+        }
+        Show(T("Je k dispozici nová verze", "A new version is available"),
+            T($"FileAction {version} – klikněte sem pro instalaci.", $"FileAction {version} – click here to install."), false);
+        _balloonClick = install;
+    }
+
     public void Show(string title, string text, bool error)
     {
+        _balloonClick = null;
         _icon.BalloonTipTitle = title;
         _icon.BalloonTipText = string.IsNullOrWhiteSpace(text) ? " " : text;
         _icon.BalloonTipIcon = error ? Forms.ToolTipIcon.Warning : Forms.ToolTipIcon.Info;

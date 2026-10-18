@@ -40,6 +40,8 @@ Name: "{userprograms}\FileAction"; Filename: "{app}\FileAction.exe"
 
 [Run]
 Filename: "{app}\FileAction.exe"; Description: "{cm:LaunchProgram,FileAction}"; Flags: nowait postinstall skipifsilent
+; Silent install = in-app update: start the new version again.
+Filename: "{app}\FileAction.exe"; Parameters: "--updated"; Flags: nowait; Check: WizardSilent
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/c taskkill /im FileAction.exe /f"; Flags: runhidden; RunOnceId: "StopApp"

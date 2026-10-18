@@ -69,7 +69,18 @@ internal sealed class WheelController
     public static IReadOnlyList<Operation> BuildOperations() => [.. Catalog.Build(), new Ocr.OcrOperation()];
 
     private IReadOnlyList<Operation> Operations(WheelKind wheel, IReadOnlyList<FileItem> items) =>
-        Catalog.For(wheel == WheelKind.Actions ? _actions : _coreOperations, wheel, items, _tools);
+        WheelLayout.Arrange(Catalog.For(wheel == WheelKind.Actions ? _actions : _coreOperations, wheel, items, _tools),
+            _settings.HiddenOperations, _settings.FavoriteOperations);
+
+    /// <summary>Every operation the wheels can show (for the wheel editor).</summary>
+    public IReadOnlyList<Operation> AllOperations => [.. _coreOperations, .. _actions];
+
+    private Operation? LastFor(IReadOnlyList<FileItem> items)
+    {
+        var id = _settings.LastOperationId;
+        var op = id is null ? null : AllOperations.FirstOrDefault(o => o.Id == id);
+        return op is not null && op.AppliesTo(items) && op.IsAvailable(_tools, items) ? op : null;
+    }
 
     private void OnModifierTapped(ModifierKey key)
     {
@@ -77,7 +88,11 @@ internal sealed class WheelController
             return;
         if (_wheel is { IsFinished: false } open)
         {
-            open.SwitchTo(wheel);
+            // Same key again: toggle "repeat last"; another key: switch wheel.
+            if (wheel == open.CurrentWheel)
+                open.ToggleRepeat();
+            else
+                open.SwitchTo(wheel);
             return;
         }
         if (_input.IsDragging)
@@ -133,7 +148,15 @@ internal sealed class WheelController
     {
         _wheel?.Finish();
         UI.Theme.Refresh();
-        var window = new WheelWindow(mode, wheel, items, _settings, Operations, _jobs.Start);
+        var window = new WheelWindow(mode, wheel, items, _settings, Operations, _jobs.Start)
+        {
+            LastOperation = LastFor,
+            RunRepeat = targets =>
+            {
+                if (LastFor(targets) is { } last)
+                    _jobs.Start(last, targets, _settings.LastParameters);
+            },
+        };
         window.Closed += (_, _) =>
         {
             if (ReferenceEquals(_wheel, window))

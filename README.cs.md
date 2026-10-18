@@ -32,6 +32,10 @@ Inspirováno skvělou aplikací [Tangerine](https://tangerineformac.com/) pro ma
 
 Kolo zůstane otevřené, dokud soubor nepustíte. Klávesu tedy můžete pustit a další klávesou přepnout na jiné kolo. Klávesy lze v nastavení přehodit.
 
+**Zopakovat poslední akci:** během tažení ťukněte na stejnou klávesu znovu (nebo na otevřeném kole stiskněte **R**). Kolo se změní na jednu výseč, která zopakuje to, co jste dělali naposledy, se stejným nastavením (třeba stejné časy oříznutí).
+
+**Vlastní kolo:** v **Nastavení → Upravit kolo** označíte oblíbené výseče hvězdičkou (budou vždy první a na stejném místě) a nepoužívané skryjete.
+
 **Bez myši:** vyberte soubory v Průzkumníku, nebo zkopírujte soubor či snímek obrazovky (**Win + Shift + S**), a stiskněte **Ctrl + Alt + Mezerník**. Šipkami vyberete výseč, Enter potvrdí, Tab přepne kolo, Esc zavře, čísla 1–9 spustí výseč přímo.
 Kolo otevřete i přes **pravé tlačítko → FileAction…** (ve Windows 11 pod „Zobrazit další možnosti“).
 
@@ -79,6 +83,8 @@ Stáhněte `FileAction-Setup-x.y.z.exe` z [Releases](../../releases) nebo z arte
 Aplikace je česky i anglicky a ve světlém i tmavém režimu; obojí se řídí nastavením Windows, jazyk jde přepnout v nastavení.
 
 Při prvním spuštění se FileAction zapíše do automatického spouštění a do kontextové nabídky Průzkumníka (obojí jde vypnout v nastavení). Pak běží v oznamovací oblasti vedle hodin.
+
+**Aktualizace** se instalují samy: FileAction se občas zeptá GitHubu na nejnovější vydání (o vašich souborech se nic neodesílá), nabídne aktualizaci v oznámení a v nabídce u hodin, ověří otisk SHA-256 instalátoru a nainstaluje ho na pozadí. Kontrolu jde v nastavení vypnout. Přenosná verze místo toho otevře stránku ke stažení.
 
 Požadavky: Windows 10 (1809+) nebo Windows 11, x64.
 

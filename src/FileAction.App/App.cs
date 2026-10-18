@@ -50,6 +50,7 @@ internal sealed class App : Application
     private TrayIcon? _tray;
     private HotkeyListener? _hotkey;
     private HotkeyPreset? _activeHotkey;
+    private readonly Updater _updater = new();
 
     public App(SingleInstance instance, string[] args)
     {
@@ -91,6 +92,9 @@ internal sealed class App : Application
             }
         });
         _tray = CreateTray();
+        SettingsWindow.Updater = _updater;
+        SettingsWindow.Operations = () => _controller.AllOperations;
+        _updater.StartBackgroundChecks(_settings, update => _tray?.OfferUpdate(update.Version, () => _ = _updater.InstallAsync(update)));
         _hotkey = new HotkeyListener(_controller.OnHotkey);
         ApplyHotkey();
         _instance.Listen(Dispatcher, HandleArgs);
@@ -102,6 +106,10 @@ internal sealed class App : Application
             _settings.Save();
             TryIntegrateOnFirstRun();
             OpenSettings();
+        }
+        else if (_args.Contains("--updated"))
+        {
+            _tray.Show(T("FileAction je aktualizovaný", "FileAction was updated"), T($"Verze {Updater.Current}", $"Version {Updater.Current}"), false);
         }
         else if (!_args.Contains("--background"))
         {
@@ -122,8 +130,13 @@ internal sealed class App : Application
         }
     }
 
-    private TrayIcon CreateTray() =>
-        new(OpenSettings, () => _controller.OpenForClipboard(), () => ShelfWindow.Open([]), ShowHelp, SetPaused, _settings.Paused, () => Shutdown());
+    private TrayIcon CreateTray()
+    {
+        var tray = new TrayIcon(OpenSettings, () => _controller.OpenForClipboard(), () => ShelfWindow.Open([]), ShowHelp, SetPaused, _settings.Paused, () => Shutdown());
+        if (_updater.Available is { } update)
+            tray.OfferUpdate(update.Version, () => _ = _updater.InstallAsync(update));
+        return tray;
+    }
 
     private void HandleArgs(string[] args)
     {
@@ -210,6 +223,7 @@ internal sealed class App : Application
             3. Pusťte soubor na výseč kola. Do středu = zrušit.
 
             Kolo zůstane otevřené, dokud soubor nepustíte; klávesu můžete pustit a další klávesou přepnout kolo.
+            Ťuknutí na stejnou klávesu znovu ukáže „zopakovat poslední akci“.
 
             Bez myši: vyberte soubory v Průzkumníku (nebo zkopírujte soubor či snímek obrazovky) a stiskněte {hotkey}.
             Šipky vyberou výseč, Enter potvrdí, Tab přepne kolo, Esc zavře.
@@ -226,6 +240,7 @@ internal sealed class App : Application
             3. Drop the file on a slice of the wheel. Drop it in the middle to cancel.
 
             The wheel stays open until you drop; you can release the key and tap another one to switch wheels.
+            Tap the same key again to "repeat the last action".
 
             Without the mouse: select files in File Explorer (or copy a file or a screenshot) and press {hotkey}.
             Arrows pick a slice, Enter runs it, Tab switches wheels, Esc closes.

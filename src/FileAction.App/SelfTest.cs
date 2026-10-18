@@ -36,6 +36,7 @@ internal static class SelfTest
 
             TestDrops(log);
             TestOcr(outDir, log);
+            TestUpdateCheck(log);
 
             File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
             return 0;
@@ -86,6 +87,7 @@ internal static class SelfTest
             log.Add($"ok {Path.GetFileName(outDir)}/{s.Name}");
         }
 
+        SettingsWindow.Operations = () => [.. core, .. actions];
         var settingsWindow = new SettingsWindow(settings, tools, () => { });
         SaveWindow(settingsWindow, Path.Combine(outDir, "settings.png"), 560);
         log.Add($"ok {Path.GetFileName(outDir)}/settings");
@@ -98,6 +100,27 @@ internal static class SelfTest
         SaveWindow(jobs, Path.Combine(outDir, "jobs.png"), 380, desktop: true);
         jobs.Close();
         log.Add($"ok {Path.GetFileName(outDir)}/jobs");
+
+        settings.FavoriteOperations = ["image.to.webp", "image.compress"];
+        settings.HiddenOperations = ["image.to.tiff"];
+        var editor = new WheelEditorWindow(settings, [.. core, .. actions], () => { });
+        SaveWindow(editor, Path.Combine(outDir, "wheel-editor.png"), 640);
+        log.Add($"ok {Path.GetFileName(outDir)}/wheel-editor");
+
+        // Customised wheel and the "repeat last" view.
+        var photo = new List<FileItem> { new(N(@"C:\Fotky\dovolená.jpg", @"C:\Photos\vacation.jpg")) };
+        IReadOnlyList<Operation> Arranged(WheelKind wheel, IReadOnlyList<FileItem> items) =>
+            WheelLayout.Arrange(Source(wheel, items), settings.HiddenOperations, settings.FavoriteOperations);
+        var custom = new WheelWindow(WheelMode.Drag, WheelKind.Convert, photo, settings, Arranged, (_, _) => { });
+        Check(custom.CurrentWheel == WheelKind.Convert, "custom wheel");
+        custom.RenderPreview(Path.Combine(outDir, "wheel-customized.png"), 0);
+        custom.Close();
+        var webp = core.Single(o => o.Id == "image.to.webp");
+        var repeat = new WheelWindow(WheelMode.Drag, WheelKind.Convert, photo, settings, Arranged, (_, _) => { }) { LastOperation = _ => webp };
+        repeat.ToggleRepeat();
+        repeat.RenderPreview(Path.Combine(outDir, "wheel-repeat.png"), 0);
+        repeat.Close();
+        log.Add($"ok {Path.GetFileName(outDir)}/wheel-repeat");
 
         var trim = core.Single(o => o.Id == "video.trim");
         var dialog = new ParameterDialog(trim, [new FileItem(N(@"C:\Videa\klip.mov", @"C:\Videos\clip.mov"))]);
@@ -161,6 +184,25 @@ internal static class SelfTest
         var result = Task.Run(() => Ocr.OcrOperation.RecognizeAsync(engine, png)).GetAwaiter().GetResult();
         Check(result.Contains("12345"), $"OCR read \"{result}\"");
         log.Add($"ok ocr: {result}");
+    }
+
+    /// <summary>Asks the real GitHub API, as the app does; logged only (the network may be unavailable).</summary>
+    private static void TestUpdateCheck(List<string> log)
+    {
+        try
+        {
+            using var http = new System.Net.Http.HttpClient();
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("FileAction-selftest");
+            var json = http.GetStringAsync(UpdateInfo.LatestReleaseApi).GetAwaiter().GetResult();
+            var latest = UpdateInfo.Parse(json);
+            log.Add(latest is null
+                ? "update check: no usable release"
+                : $"update check: latest {latest.Tag}, installer {(latest.InstallerUrl is null ? "missing" : "found")}, sha256 {(latest.InstallerSha256 is null ? "missing" : "present")}");
+        }
+        catch (Exception ex)
+        {
+            log.Add("update check skipped: " + ex.Message);
+        }
     }
 
     private static void Check(bool condition, string what)

@@ -48,6 +48,19 @@ public sealed class AppSettings
 
     public Settings Quality { get; set; } = new();
 
+    /// <summary>Operation ids the user removed from the wheels.</summary>
+    public List<string> HiddenOperations { get; set; } = [];
+
+    /// <summary>Operation ids that always come first on their wheel, in this order.</summary>
+    public List<string> FavoriteOperations { get; set; } = [];
+
+    /// <summary>The last operation run, for "repeat last" (with the values it asked for, e.g. trim times).</summary>
+    public string? LastOperationId { get; set; }
+
+    public Dictionary<string, string>? LastParameters { get; set; }
+
+    public bool CheckForUpdates { get; set; } = true;
+
     public WheelKind? WheelFor(ModifierKey key)
     {
         if (key == ModifierKey.None)

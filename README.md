@@ -32,6 +32,10 @@ Inspired by the wonderful [Tangerine](https://tangerineformac.com/) for macOS. F
 
 The wheel stays open until you drop, so you can release the key and tap another one to switch wheels. Keys can be reassigned in Settings.
 
+**Repeat the last action:** tap the same key again while dragging (or press **R** on an open wheel) and the wheel turns into a single slice that repeats what you did last, with the same settings (e.g. the same trim times).
+
+**Your own wheel:** in **Settings → Customize wheels** you can star favourite slices (they always come first, in the same place) and hide the ones you never use.
+
 **No mouse:** select files in File Explorer, or copy a file or a screenshot (**Win + Shift + S**), and press **Ctrl + Alt + Space**. Arrows pick a slice, Enter runs it, Tab switches wheels, Esc closes, 1–9 run a slice directly.
 You can also open the wheel with **right-click → FileAction…** (on Windows 11 under “Show more options”).
 
@@ -79,6 +83,8 @@ Download `FileAction-Setup-x.y.z.exe` from [Releases](../../releases), or from t
 The app speaks English and Czech and comes in light and dark mode; both follow your Windows settings, and the language can be switched in Settings.
 
 On first launch FileAction adds itself to startup and to the File Explorer context menu (both can be turned off in Settings). It then lives in the notification area next to the clock.
+
+**Updates** install themselves: FileAction asks GitHub for the latest release now and then (nothing about your files is sent), offers the update in a notification and the tray menu, verifies the installer's SHA-256 and installs it silently. You can turn the check off in Settings. The portable version opens the download page instead.
 
 Requirements: Windows 10 (1809+) or Windows 11, x64.
 

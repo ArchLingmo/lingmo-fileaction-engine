@@ -14,6 +14,11 @@ namespace FileAction.App.UI;
 internal sealed class SettingsWindow : Window
 {
     private static SettingsWindow? _open;
+
+    /// <summary>Set by the app: the update checker and the operations the wheel editor lists.</summary>
+    public static Shell.Updater? Updater { get; set; }
+
+    public static Func<IReadOnlyList<Operation>>? Operations { get; set; }
     private readonly AppSettings _settings;
     private readonly ToolLocator _tools;
     private readonly Action _changed;
@@ -35,7 +40,15 @@ internal sealed class SettingsWindow : Window
         FontFamily = Theme.UiFont;
         Content = _scroll;
         Build();
-        Closed += (_, _) => _open = null;
+        Action refresh = () => Dispatcher.BeginInvoke(Rebuild);
+        if (Updater is not null)
+            Updater.Changed += refresh;
+        Closed += (_, _) =>
+        {
+            _open = null;
+            if (Updater is not null)
+                Updater.Changed -= refresh;
+        };
     }
 
     public static void ShowSingle(AppSettings settings, ToolLocator tools, Action changed)
@@ -102,6 +115,15 @@ internal sealed class SettingsWindow : Window
         {
             root.Children.Add(Card(AppSettings.WheelName(wheel), description, KeyChooser(wheel)));
         }
+        root.Children.Add(Card(T("Upravit kolo", "Customize wheels"),
+            T("Oblíbené výseče jako první, nepoužívané skrýt. Ťuknutí na stejnou klávesu znovu (nebo R) zopakuje poslední akci.",
+              "Favourite slices first, hide the ones you never use. Tap the same key again (or press R) to repeat the last action."),
+            Button(T("Upravit…", "Customize…"), () =>
+            {
+                if (Operations is not null)
+                    WheelEditorWindow.ShowSingle(_settings, Operations(), _changed);
+            }, glyph: "\uE70F"),
+            glyph: "\uE8EE"));
         root.Children.Add(Card(T("Pozastavit gesta", "Pause gestures"), T("Kolo se při tažení neotevře.", "The wheel won’t open while dragging."),
             Toggle(_settings.Paused, v =>
             {
@@ -172,6 +194,16 @@ internal sealed class SettingsWindow : Window
             Toggle(ShellIntegration.IsAutostartEnabled, v => Apply(() => ShellIntegration.SetAutostart(v))), glyph: "\uE7E8"));
         root.Children.Add(Card(T("Kontextová nabídka Průzkumníka", "File Explorer context menu"), T("Položka „FileAction…“ po kliknutí pravým tlačítkem", "A “FileAction…” item on right-click"),
             Toggle(ShellIntegration.IsContextMenuEnabled, v => Apply(() => ShellIntegration.SetContextMenu(v))), glyph: "\uE8A7"));
+
+        root.Children.Add(SectionHeader(T("Aktualizace", "Updates")));
+        root.Children.Add(UpdateCard());
+        root.Children.Add(Card(T("Kontrolovat aktualizace automaticky", "Check for updates automatically"),
+            T("Občas se zeptá GitHubu na nejnovější vydání. O vašich souborech se nic neodesílá.", "Now and then asks GitHub for the latest release. Nothing about your files is sent."),
+            Toggle(_settings.CheckForUpdates, v =>
+            {
+                _settings.CheckForUpdates = v;
+                Save();
+            })));
 
         root.Children.Add(SectionHeader(T("Pomocné programy", "Helper programs")));
         root.Children.Add(Card(T("Co zvládá FileAction sám", "Built in"),
@@ -276,6 +308,40 @@ internal sealed class SettingsWindow : Window
         {
             MessageBox.Show(this, ex.Message, "FileAction", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private Border UpdateCard()
+    {
+        var updater = Updater;
+        var current = Shell.Updater.Current;
+        string status;
+        UIElement? action = null;
+        if (updater is null)
+        {
+            status = "";
+        }
+        else if (updater.Installing)
+        {
+            status = T("Stahuji a instaluji…", "Downloading and installing…");
+        }
+        else if (updater.Available is { } update)
+        {
+            status = T($"K dispozici je verze {update.Version}.", $"Version {update.Version} is available.");
+            action = Button(Shell.Updater.IsInstalled ? T("Aktualizovat", "Update") : T("Stáhnout", "Download"),
+                () => _ = updater.InstallAsync(update), primary: true, glyph: "\uE896");
+        }
+        else
+        {
+            status = updater.LastError is not null ? T("Kontrola se nepovedla: ", "Check failed: ") + updater.LastError
+                : updater.LastChecked is { } at ? T($"Máte nejnovější verzi (kontrola {at:HH:mm}).", $"You're up to date (checked {at:HH:mm}).")
+                : T("Zatím nezkontrolováno.", "Not checked yet.");
+            action = Button(T("Zkontrolovat", "Check now"), async () =>
+            {
+                await updater.CheckAsync();
+                Rebuild();
+            }, glyph: "\uE72C");
+        }
+        return Card($"FileAction {current}", status, action, glyph: "\uE777");
     }
 
     private Border ToolCard(ExternalTool tool)

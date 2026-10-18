@@ -11,10 +11,14 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
 {
     private JobsWindow? _window;
 
-    public async void Start(Operation op, IReadOnlyList<FileItem> items)
+    public void Start(Operation op, IReadOnlyList<FileItem> items) => Start(op, items, null);
+
+    /// <param name="parameters">Values for the operation's questions; when given (repeat last) no dialog is shown.</param>
+    public async void Start(Operation op, IReadOnlyList<FileItem> items, IReadOnlyDictionary<string, string>? parameters)
     {
         if (op is AppAction action)
         {
+            Remember(op, null);
             try
             {
                 await action.RunAsync(items);
@@ -26,14 +30,15 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
             return;
         }
 
-        IReadOnlyDictionary<string, string> parameters = new Dictionary<string, string>();
-        if (op.Parameters.Count > 0)
+        parameters ??= new Dictionary<string, string>();
+        if (op.Parameters.Count > 0 && parameters.Count == 0)
         {
             var dialog = new ParameterDialog(op, items);
             if (dialog.ShowDialog() != true)
                 return;
             parameters = dialog.Values;
         }
+        Remember(op, parameters);
 
         _window ??= new JobsWindow();
         using var cts = new CancellationTokenSource();
@@ -74,6 +79,13 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
         {
             card.Fail(Friendly(ex));
         }
+    }
+
+    private void Remember(Operation op, IReadOnlyDictionary<string, string>? parameters)
+    {
+        settings.LastOperationId = op.Id;
+        settings.LastParameters = parameters is { Count: > 0 } ? new Dictionary<string, string>(parameters) : null;
+        settings.Save();
     }
 
     private static string Friendly(Exception ex) => ex switch

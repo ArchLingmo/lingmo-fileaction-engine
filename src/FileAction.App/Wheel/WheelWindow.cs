@@ -60,6 +60,7 @@ internal sealed class WheelWindow : Window
     private int _highlight = -1;
     private Win32.POINT _anchor;
     private bool _finished;
+    private bool _repeat;
     private DispatcherTimer? _closeTimer;
 
     public WheelWindow(
@@ -138,6 +139,14 @@ internal sealed class WheelWindow : Window
 
     public WheelMode Mode { get; }
 
+    public WheelKind CurrentWheel => _wheel;
+
+    /// <summary>The last operation if it fits these items (for the "repeat last" view).</summary>
+    public Func<IReadOnlyList<FileItem>, Operation?>? LastOperation { get; init; }
+
+    /// <summary>Runs the last operation again with the values it used last time.</summary>
+    public Action<IReadOnlyList<FileItem>>? RunRepeat { get; init; }
+
     public bool IsFinished => _finished;
 
     private IntPtr Handle => new WindowInteropHelper(this).Handle;
@@ -193,6 +202,25 @@ internal sealed class WheelWindow : Window
         if (_finished)
             return;
         _wheel = wheel;
+        _repeat = false;
+        LoadOperations();
+        Build();
+        AnimateSlicesIn();
+        if (Mode == WheelMode.Click && _ops.Count > 0)
+            SetHighlight(0);
+    }
+
+    /// <summary>Tapping the same key again shows a single slice that repeats the last action.</summary>
+    public void ToggleRepeat()
+    {
+        if (_finished)
+            return;
+        if (_repeat)
+        {
+            SwitchTo(_wheel);
+            return;
+        }
+        _repeat = true;
         LoadOperations();
         Build();
         AnimateSlicesIn();
@@ -222,6 +250,14 @@ internal sealed class WheelWindow : Window
     public void RenderPreview(string file, int highlight)
     {
         _canvas.RenderTransform = Transform.Identity;
+        foreach (var group in _groups)
+        {
+            // Offscreen rendering doesn't advance animations; show the final state.
+            group.BeginAnimation(OpacityProperty, null);
+            var scale = (ScaleTransform)((TransformGroup)group.RenderTransform).Children[0];
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        }
         if (highlight >= 0 && highlight < _ops.Count)
             SetHighlight(highlight);
         Content = null;
@@ -236,7 +272,9 @@ internal sealed class WheelWindow : Window
 
     private void LoadOperations()
     {
-        _ops = _items.Count == 0 ? [] : _source(_wheel, _items);
+        _ops = _items.Count == 0 ? []
+            : _repeat ? (LastOperation?.Invoke(_items) is { } last ? [last] : [])
+            : _source(_wheel, _items);
         _highlight = -1;
     }
 
@@ -297,7 +335,7 @@ internal sealed class WheelWindow : Window
                     Shell.Notifications.Show(T("Stažení se nepovedlo", "Download failed"), ex.Message, error: true);
                     return;
                 }
-                _execute(op, content.Items);
+                Dispatch(op, content.Items);
             });
         }
     }
@@ -347,6 +385,9 @@ internal sealed class WheelWindow : Window
             case Key.LeftAlt or Key.RightAlt:
                 SwitchToKey(Input.ModifierKey.Alt);
                 break;
+            case Key.R:
+                ToggleRepeat();
+                break;
             case >= Key.D1 and <= Key.D9:
                 if (key - Key.D1 < _ops.Count)
                     Run(key - Key.D1);
@@ -375,7 +416,15 @@ internal sealed class WheelWindow : Window
         var op = _ops[index];
         var items = _items;
         Finish();
-        _execute(op, items);
+        Dispatch(op, items);
+    }
+
+    private void Dispatch(Operation op, IReadOnlyList<FileItem> items)
+    {
+        if (_repeat && RunRepeat is not null)
+            RunRepeat(items);
+        else
+            _execute(op, items);
     }
 
 
@@ -613,7 +662,14 @@ internal sealed class WheelWindow : Window
         _detail.Foreground = Theme.Muted;
         _tabTrack.Background = Theme.Track;
 
-        if (_items.Count > 0)
+        if (_repeat)
+        {
+            _icon.Visibility = Visibility.Collapsed;
+            _iconGlyph.Text = "\uE8EE"; // RepeatAll
+            _iconGlyph.Foreground = Theme.Accent;
+            _iconGlyph.Visibility = Visibility.Visible;
+        }
+        else if (_items.Count > 0)
         {
             _icon.Source = Shell.FileIcons.Get(_items[0].Path);
             _icon.Visibility = _icon.Source is null ? Visibility.Collapsed : Visibility.Visible;
@@ -709,6 +765,15 @@ internal sealed class WheelWindow : Window
 
     private void UpdateHubText()
     {
+        if (_repeat)
+        {
+            var last = _ops.Count > 0 ? _ops[0] : null;
+            _title.Text = _highlight >= 0 && last is not null ? last.Label : T("Zopakovat", "Repeat");
+            _detail.Text = last is null
+                ? T("Poslední akce se sem nehodí", "Last action doesn't fit")
+                : _highlight >= 0 ? T("poslední akce", "last action") : last.Label;
+            return;
+        }
         if (_highlight >= 0 && _highlight < _ops.Count)
         {
             var op = _ops[_highlight];
