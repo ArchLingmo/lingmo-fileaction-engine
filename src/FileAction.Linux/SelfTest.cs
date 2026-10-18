@@ -17,7 +17,7 @@ public static class SelfTest
         var log = new List<string>();
         try
         {
-            AppBuilder.Configure<App>().UseSkia().WithInterFont()
+            Program.WithBundledFont(AppBuilder.Configure<App>().UseSkia())
                 .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                 .SetupWithoutStarting();
             foreach (var (language, dark, folder) in new[] { (Language.English, true, "en"), (Language.English, false, "en-light"), (Language.Czech, true, "cs") })

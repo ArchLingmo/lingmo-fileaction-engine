@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Media;
 using Avalonia.Themes.Fluent;
 using FileAction.Core;
 
@@ -30,7 +31,14 @@ public sealed class App : Application
 public static class Program
 {
     public static AppBuilder BuildAvaloniaApp() =>
-        AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont();
+        WithBundledFont(AppBuilder.Configure<App>().UsePlatformDetect());
+
+    /// <summary>
+    /// Uses the bundled Inter font as the default, so the app doesn't depend on which fonts the system has
+    /// (a minimal install may have none, and Avalonia then refuses to start).
+    /// </summary>
+    public static AppBuilder WithBundledFont(AppBuilder builder) =>
+        builder.WithInterFont().With(new FontManagerOptions { DefaultFamilyName = "fonts:Inter#Inter" });
 
     [STAThread]
     public static int Main(string[] args)
