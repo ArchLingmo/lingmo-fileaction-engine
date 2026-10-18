@@ -94,8 +94,12 @@ jobs:
         run: |
           $out = Join-Path $PWD 'self-test'
           $p = Start-Process -FilePath "$PWD\publish\FileAction.exe" -ArgumentList '--self-test', "`"$out`"" -Wait -PassThru
-          Get-Content (Join-Path $out 'self-test.txt')
-          if ($p.ExitCode -ne 0) { throw "Self-test failed with exit code $($p.ExitCode)" }
+          Get-Content (Join-Path $out 'self-test.txt') -ErrorAction Continue
+          if ($p.ExitCode -ne 0) {
+            # A crash that bypasses .NET exception handling is only reported in the event log.
+            Get-WinEvent -FilterHashtable @{ LogName = 'Application'; ProviderName = '.NET Runtime', 'Application Error' } -MaxEvents 4 -ErrorAction SilentlyContinue | Format-List TimeCreated, Message
+            throw "Self-test failed with exit code $($p.ExitCode)"
+          }
 
       - name: Measure size and idle resource use
         shell: pwsh

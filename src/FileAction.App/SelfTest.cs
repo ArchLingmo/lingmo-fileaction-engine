@@ -35,11 +35,12 @@ internal static class SelfTest
             }
 
             log.AddRange(SmokeTest.Run(Path.Combine(outDir, "smoke")));
-            TestSettingsRoundTrip(log);
-            TestExplorerCom(log);
-            TestDrops(log);
-            TestOcr(outDir, log);
-            TestUpdateCheck(log);
+            // Saved after every step, so a hard crash (which skips the catch below) still shows where it stopped.
+            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(log), () => TestDrops(log), () => TestOcr(outDir, log), () => TestUpdateCheck(log) })
+            {
+                File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
+                step();
+            }
 
             File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
             return 0;
