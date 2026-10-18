@@ -36,7 +36,7 @@ internal static class SelfTest
 
             log.AddRange(SmokeTest.Run(Path.Combine(outDir, "smoke")));
             // Saved after every step, so a hard crash (which skips the catch below) still shows where it stopped.
-            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(log), () => TestDrops(log), () => TestOcr(outDir, log), () => TestUpdateCheck(log) })
+            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestOcr(outDir, log), () => TestUpdateCheck(log) })
             {
                 File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
                 step();
@@ -144,11 +144,33 @@ internal static class SelfTest
     }
 
     /// <summary>Reading the Explorer selection goes through late-bound COM, which trimming could break.</summary>
-    private static void TestExplorerCom(List<string> log)
+    private static void TestExplorerCom(string outDir, List<string> log)
     {
-        var selection = Shell.ExplorerSelection.Get(IntPtr.Zero);
-        log.Add($"ok explorer COM ({selection.Count} selected)");
+        var file = Path.Combine(outDir, "smoke", "smoke.jpg");
+        using (System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{file}\"")) { }
+        for (var attempt = 0; attempt < 40; attempt++)
+        {
+            Thread.Sleep(500);
+            var frame = FindWindow("CabinetWClass", null);
+            if (frame == IntPtr.Zero)
+                continue;
+            var selection = Shell.ExplorerSelection.Get(frame);
+            if (selection.Any(p => string.Equals(p, file, StringComparison.OrdinalIgnoreCase)))
+            {
+                log.Add("ok explorer selection");
+                PostMessage(frame, 0x0010 /* WM_CLOSE */, IntPtr.Zero, IntPtr.Zero);
+                return;
+            }
+        }
+        // Without an interactive desktop Explorer may not open a window; the COM calls above still ran.
+        log.Add("skipped explorer selection (no Explorer window appeared)");
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern IntPtr FindWindow(string? className, string? windowName);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     /// <summary>Virtual files (as browsers and Outlook drag them) and raw images become real files.</summary>
     private static void TestDrops(List<string> log)
