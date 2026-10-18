@@ -1,9 +1,10 @@
 name: Build
 
 on:
+  # No tag trigger: a release creates its v1.2.3 tag, and with RELEASE_TOKEN that tag push would
+  # start this workflow again, which re-published the release in a loop.
   push:
     branches: ['**']
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
     inputs:
@@ -29,13 +30,12 @@ jobs:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           # A push to main whose commit message starts with "Release v1.2.3" publishes that version,
-          # as does a v1.2.3 tag or a manual run with a version.
+          # as does a manual run with a version.
           release="${RELEASE#v}"
           first_line="$(printf '%s\n' "$COMMIT_MESSAGE" | head -n1)"
           if [ -z "$release" ] && [ "$GITHUB_REF" = refs/heads/main ] && [[ "$first_line" =~ ^Release\ v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
             release="${BASH_REMATCH[1]}"
           fi
-          if [ -z "$release" ] && [ "$GITHUB_REF_TYPE" = tag ]; then release="${GITHUB_REF_NAME#v}"; fi
           if [ -n "$release" ]; then
             echo "version=$release" >> "$GITHUB_OUTPUT"
             echo "publish=true" >> "$GITHUB_OUTPUT"
@@ -130,7 +130,8 @@ jobs:
           New-Item -ItemType Directory -Force artifacts | Out-Null
           & $iscc "/DAppVersion=$env:VERSION" installer/FileAction.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
-          Compress-Archive -Path publish/* -DestinationPath "artifacts/FileAction-$env:VERSION-win-x64.zip"
+          7z a -tzip -mx=9 "artifacts/FileAction-$env:VERSION-win-x64.zip" ./publish/* | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "7-Zip failed" }
           Get-ChildItem artifacts | ForEach-Object { "{0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
           $setup = Get-Item "artifacts/FileAction-Setup-$env:VERSION.exe"
           if ($setup.Length -gt 50MB) { throw ("The installer grew to {0:N1} MB (limit 50 MB)" -f ($setup.Length / 1MB)) }
@@ -250,27 +251,45 @@ jobs:
         with:
           name: aur
           path: aur
-      - name: Replace an existing release of this version
+      - name: Check the release token
+        id: token
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
-          # GitHub keeps the original author when a release is updated, so a re-release deletes it first.
+          # With a RELEASE_TOKEN secret (a personal access token) the release is published under that
+          # person's account; otherwise, or if the token can't be used, under github-actions.
           if [ -z "$GH_TOKEN" ]; then echo "No RELEASE_TOKEN secret: publishing as github-actions."; exit 0; fi
-          echo "Publishing as $(gh api user -q .login)"
-          if gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh release delete "v$VERSION" -R "$GITHUB_REPOSITORY" --yes --cleanup-tag
-            echo "Deleted the existing release v$VERSION"
+          if login="$(gh api user -q .login)" && [ "$(gh api "repos/$GITHUB_REPOSITORY" -q .permissions.push)" = true ]; then
+            echo "Publishing as $login"
+            echo "usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::RELEASE_TOKEN can't write to this repository (expired or missing Contents: read and write); publishing as github-actions."
           fi
       - name: Release
+        id: release
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
-          # With a RELEASE_TOKEN secret (a personal access token) the release is published under that
-          # person's account; otherwise under github-actions.
-          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+          token: ${{ steps.token.outputs.usable == 'true' && secrets.RELEASE_TOKEN || github.token }}
           tag_name: v${{ env.VERSION }}
           target_commitish: ${{ github.sha }}
           name: FileAction ${{ env.VERSION }}
           generate_release_notes: true
+          overwrite_files: true
+          files: |
+            artifacts/*
+            linux/*.tar.xz
+            linux/PKGBUILD
+      - name: Release (as github-actions, if the token was refused)
+        if: steps.release.outcome == 'failure'
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ github.token }}
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: FileAction ${{ env.VERSION }}
+          generate_release_notes: true
+          overwrite_files: true
           files: |
             artifacts/*
             linux/*.tar.xz

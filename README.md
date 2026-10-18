@@ -123,7 +123,7 @@ publish\FileAction.exe
 
 ### Releasing
 
-Push a commit to `main` whose message starts with `Release v1.2.3` (or push a `v1.2.3` tag, or run the **Build** workflow manually with a version). CI builds the installer and zip and publishes them as a GitHub release. Add a repository secret `RELEASE_TOKEN` (a fine-grained personal access token with *Contents: read and write* on this repository) to publish releases under your own account instead of github-actions.
+Push a commit to `main` whose message starts with `Release v1.2.3` (or run the **Build** workflow manually with a version). CI builds the installer and zip and publishes them as a GitHub release. Add a repository secret `RELEASE_TOKEN` (a fine-grained personal access token with *Contents: read and write* on this repository) to publish releases under your own account instead of github-actions.
 
 The same run builds the Linux tarball, installs the AUR package on Arch Linux to test it and, when the `AUR_SSH_PRIVATE_KEY` secret holds the key of the AUR account that maintains `fileaction-bin`, pushes the updated PKGBUILD to the AUR.
 

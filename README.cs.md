@@ -123,7 +123,7 @@ publish\FileAction.exe
 
 ### Vydání nové verze
 
-Pošlete do `main` commit, jehož zpráva začíná `Release v1.2.3` (nebo pushněte tag `v1.2.3`, případně ručně spusťte workflow **Build** s číslem verze). CI sestaví instalátor a zip a zveřejní je jako vydání na GitHubu. Když do repozitáře přidáte secret `RELEASE_TOKEN` (osobní přístupový token s oprávněním *Contents: read and write* k tomuto repozitáři), vydání se zveřejní pod vaším účtem místo github-actions.
+Pošlete do `main` commit, jehož zpráva začíná `Release v1.2.3` (nebo ručně spusťte workflow **Build** s číslem verze). CI sestaví instalátor a zip a zveřejní je jako vydání na GitHubu. Když do repozitáře přidáte secret `RELEASE_TOKEN` (osobní přístupový token s oprávněním *Contents: read and write* k tomuto repozitáři), vydání se zveřejní pod vaším účtem místo github-actions.
 
 Stejný běh sestaví i balíček pro Linux, na Arch Linuxu ho zkušebně nainstaluje a když secret `AUR_SSH_PRIVATE_KEY` obsahuje klíč účtu AUR, který spravuje `fileaction-bin`, nahraje nový PKGBUILD do AUR.
 
