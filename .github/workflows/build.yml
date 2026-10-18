@@ -84,6 +84,27 @@ jobs:
           Get-Content (Join-Path $out 'self-test.txt')
           if ($p.ExitCode -ne 0) { throw "Self-test failed with exit code $($p.ExitCode)" }
 
+      - name: Measure size and idle resource use
+        shell: pwsh
+        run: |
+          function Size($path) { (Get-ChildItem $path -Recurse -File | Measure-Object Length -Sum).Sum / 1MB }
+          $total = Size publish
+          $tools = Size publish/tools
+          "Publish folder: {0:N1} MB (helper tools {1:N1} MB, app + .NET runtime {2:N1} MB)" -f $total, $tools, ($total - $tools)
+          Get-ChildItem publish/tools | ForEach-Object { "  {0}: {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+
+          # Start like after sign-in (no first-run window) and sample memory and CPU while idle.
+          New-Item -ItemType Directory -Force "$env:APPDATA\FileAction" | Out-Null
+          '{ "FirstRunDone": true, "CheckForUpdates": false }' | Set-Content "$env:APPDATA\FileAction\settings.json"
+          $p = Start-Process -FilePath "$PWD\publish\FileAction.exe" -ArgumentList '--background' -PassThru
+          Start-Sleep -Seconds 15
+          $p.Refresh(); $cpu1 = $p.TotalProcessorTime
+          Start-Sleep -Seconds 30
+          $p.Refresh()
+          "Idle after 45 s: working set {0:N1} MB, private {1:N1} MB, CPU while idle {2:N2} s in 30 s" -f ($p.WorkingSet64 / 1MB), ($p.PrivateMemorySize64 / 1MB), ($p.TotalProcessorTime - $cpu1).TotalSeconds
+          Stop-Process -Id $p.Id -Force
+          Remove-Item "$env:APPDATA\FileAction" -Recurse -Force
+
       - name: Installer and zip
         shell: pwsh
         run: |
