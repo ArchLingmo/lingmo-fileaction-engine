@@ -2,29 +2,9 @@
 
 A single static page (`public/`) with no build step. Its only third-party request goes to the GitHub API for the latest release, so the download links and sizes stay current. If that request fails, the links point at the release the page was written for.
 
-## Run it on a server
+## Host it
 
-You need a Linux server with Docker and the compose plugin, with ports 80 and 443 open.
-
-```sh
-git clone https://github.com/Metamorfolog/file_action.git
-cd file_action/website/deploy
-./up.sh
-```
-
-`up.sh` looks up the server's public IP address and serves the page at `https://<ip-with-dashes>.sslip.io` (for example `https://203-0-113-7.sslip.io`). Caddy gets an HTTPS certificate automatically.
-
-**Using your own domain later:** point the domain's DNS `A` record at the server, then run:
-
-```sh
-SITE_ADDRESS=fileaction.example.com ./up.sh
-```
-
-The address is saved in `deploy/.env`, so the site comes back on its own after a reboot.
-
-**Updating the page:** run `git pull` in the repository. Caddy serves the files straight from `public/`, so no restart is needed.
-
-**Stopping it:** run `docker compose down` in `deploy/`.
+Copy `public/` to any static web server; no build step or server-side code is needed.
 
 ## Edit it
 
