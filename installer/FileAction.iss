@@ -10,7 +10,7 @@ AppId={{5B7E3C1A-8F2D-4C6B-9E1A-7D3F2B9C4A10}
 AppName=FileAction
 AppVersion={#AppVersion}
 AppVerName=FileAction {#AppVersion}
-AppPublisher=FileAction
+AppPublisher=Metamorfolog
 DefaultDirName={localappdata}\Programs\FileAction
 DisableProgramGroupPage=yes
 DisableDirPage=auto
@@ -20,7 +20,7 @@ OutputBaseFilename=FileAction-Setup-{#AppVersion}
 SetupIconFile=..\src\FileAction.App\Assets\FileAction.ico
 UninstallDisplayIcon={app}\FileAction.exe
 UninstallDisplayName=FileAction
-Compression=lzma2/max
+Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
@@ -42,6 +42,10 @@ Name: "{userprograms}\FileAction"; Filename: "{app}\FileAction.exe"
 Filename: "{app}\FileAction.exe"; Description: "{cm:LaunchProgram,FileAction}"; Flags: nowait postinstall skipifsilent
 ; Silent install = in-app update: start the new version again.
 Filename: "{app}\FileAction.exe"; Parameters: "--updated"; Flags: nowait; Check: WizardSilent
+
+[UninstallDelete]
+; FFmpeg and Pandoc downloaded on demand by the app.
+Type: filesandordirs; Name: "{localappdata}\FileAction\tools"
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/c taskkill /im FileAction.exe /f"; Flags: runhidden; RunOnceId: "StopApp"

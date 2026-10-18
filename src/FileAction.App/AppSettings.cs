@@ -19,12 +19,6 @@ public enum HotkeyPreset
 /// <summary>User preferences, stored as JSON in %APPDATA%\FileAction\settings.json.</summary>
 public sealed class AppSettings
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        Converters = { new JsonStringEnumConverter() },
-    };
-
     public static string Folder { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FileAction");
 
     private static string FilePath => Path.Combine(Folder, "settings.json");
@@ -86,7 +80,7 @@ public sealed class AppSettings
         try
         {
             if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), JsonOptions) ?? new AppSettings();
+                return JsonSerializer.Deserialize(File.ReadAllText(FilePath), SettingsJson.Default.AppSettings) ?? new AppSettings();
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
@@ -101,7 +95,7 @@ public sealed class AppSettings
         {
             Directory.CreateDirectory(Folder);
             var temp = FilePath + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(this, JsonOptions));
+            File.WriteAllText(temp, JsonSerializer.Serialize(this, SettingsJson.Default.AppSettings));
             File.Move(temp, FilePath, overwrite: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -134,3 +128,8 @@ public sealed class AppSettings
         _ => T("Vypnuto", "Off"),
     };
 }
+
+/// <summary>Source-generated JSON for the settings file (works in the trimmed build without reflection).</summary>
+[JsonSourceGenerationOptions(WriteIndented = true, UseStringEnumConverter = true)]
+[JsonSerializable(typeof(AppSettings))]
+internal sealed partial class SettingsJson : JsonSerializerContext;

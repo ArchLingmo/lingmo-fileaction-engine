@@ -30,4 +30,6 @@ package() {
   install -Dm644 fileaction/share/fileaction.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/fileaction.png"
   install -Dm755 fileaction/share/dolphin-servicemenu.desktop "$pkgdir/usr/share/kio/servicemenus/fileaction.desktop"
   install -Dm644 fileaction/share/fileaction.nemo_action "$pkgdir/usr/share/nemo/actions/fileaction.nemo_action"
+  install -Dm644 fileaction/share/LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 fileaction/share/THIRD-PARTY-NOTICES.md "$pkgdir/usr/share/licenses/$pkgname/THIRD-PARTY-NOTICES.md"
 }

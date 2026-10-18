@@ -71,14 +71,14 @@ U více vybraných souborů se převede každý zvlášť. Nástroje typu „spo
 
 Obrázky, PDF, tabulky, titulky a archivy zvládá FileAction sám. Některé formáty potřebují další programy:
 
-- **FFmpeg** (audio a video) a **Pandoc** (dokumenty) jsou přibalené v instalátoru,
+- **FFmpeg** (audio a video, 34 MB) a **Pandoc** (dokumenty, 35 MB) se stáhnou, až je poprvé budete potřebovat: kolo ukazuje jejich výseče ztlumené s popiskem „stáhnout FFmpeg“ a po puštění souboru se jednou zeptá, nástroj stáhne (ověří jeho zveřejněný otisk SHA-256) a převod provede. Pokud je už máte nainstalované (např. `winget install Gyan.FFmpeg`), FileAction použije ty,
 - **LibreOffice** (DOC, PPTX, ODS, převod dokumentů a tabulek do PDF) je potřeba doinstalovat zvlášť: `winget install TheDocumentFoundation.LibreOffice`.
 
-Co chybí, ukáže **Nastavení → Pomocné programy**, odkud jde i rovnou nainstalovat. Kolo nabízí jen převody, pro které je nástroj k dispozici.
+Co chybí, ukáže **Nastavení → Pomocné programy**, odkud jde i rovnou stáhnout nebo nainstalovat. Díky tomu, že nástroje nejsou v instalátoru, má instalátor pod 50 MB.
 
 ## Instalace
 
-Stáhněte `FileAction-Setup-x.y.z.exe` z [Releases](../../releases) nebo z artefaktů posledního běhu [GitHub Actions](../../actions). Instalátor nepotřebuje práva správce. Jde také o přenosnou verzi v `.zip`.
+Stáhněte `FileAction-Setup-x.y.z.exe` z [Releases](../../releases) nebo z artefaktů posledního běhu [GitHub Actions](../../actions). Instalátor (pod 50 MB) nepotřebuje práva správce. K dispozici je také přenosná verze v `.zip`.
 
 Aplikace je česky i anglicky a ve světlém i tmavém režimu; obojí se řídí nastavením Windows, jazyk jde přepnout v nastavení.
 
@@ -90,11 +90,9 @@ Požadavky: Windows 10 (1809+) nebo Windows 11, x64.
 
 ## Linux
 
-```sh
-yay -S fileaction-bin        # Arch Linux (AUR)
-```
+**Arch Linux:** u každého vydání je přiložený `PKGBUILD` (balíček `fileaction-bin`). Stáhněte ho do prázdné složky a spusťte `makepkg -si`. Do AUR (`yay -S fileaction-bin`) balíček přibude, jakmile AUR znovu otevře registraci účtů.
 
-Ostatní distribuce: stáhněte `FileAction-x.y.z-linux-x64.tar.gz` z [Releases](../../releases), rozbalte a spusťte `fileaction/app/fileaction` (.NET není potřeba).
+**Ostatní distribuce:** stáhněte `FileAction-x.y.z-linux-x64.tar.xz` (asi 32 MB) z [Releases](../../releases), rozbalte a spusťte `fileaction/app/fileaction` (.NET není potřeba).
 
 Linux aplikacím nedovolí sledovat klávesnici a myš jiných programů (Wayland to záměrně zakazuje), takže gesto „táhnu a ťuknu na klávesu“ je jen pro Windows. Na Linuxu se stejné kolo používá takto:
 
@@ -115,10 +113,9 @@ Volitelné balíčky: `ffmpeg` (audio, video), `pandoc-cli` (dokumenty), `libreo
 
 ```powershell
 # .NET 10 SDK
-./scripts/fetch-tools.ps1                      # stáhne ffmpeg.exe a pandoc.exe do .\tools
-dotnet test tests/FileAction.Tests             # testy převodů
-dotnet publish src/FileAction.App -c Release -r win-x64 --self-contained -o publish
-Copy-Item tools publish\tools -Recurse
+./scripts/fetch-tools.ps1                      # stáhne ffmpeg.exe a pandoc.exe do .\tools (pro testy)
+$env:PATH = "$PWD\tools;$env:PATH"; dotnet test tests/FileAction.Tests
+dotnet publish src/FileAction.App -c Release -r win-x64 --self-contained -o publish   # ořezané, rozbalené ~165 MB
 publish\FileAction.exe
 ```
 
@@ -147,6 +144,10 @@ tests/FileAction.Tests  jednotkové testy a integrační testy, které spustí k
 installer/              Inno Setup
 packaging/              balíček pro Linux a šablona PKGBUILD pro AUR
 ```
+
+## Licence
+
+[MIT](LICENSE). FileAction používá další open-source komponenty pod jejich vlastními licencemi, viz [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## Rozdíly oproti Tangerine
 

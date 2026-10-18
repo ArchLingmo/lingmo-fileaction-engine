@@ -614,7 +614,8 @@ internal sealed class WheelWindow : Window
 
     private static StackPanel SliceLabel(Operation op)
     {
-        var panel = new StackPanel { MaxWidth = 96, IsHitTestVisible = false };
+        // Slices that first download a tool are shown a little faded.
+        var panel = new StackPanel { MaxWidth = 96, IsHitTestVisible = false, Opacity = op is Shell.NeedsToolOperation ? 0.6 : 1 };
         var isFormat = op.Wheel == WheelKind.Convert && op.Label.Length <= 6 && op.Label.ToUpperInvariant() == op.Label;
         if (!isFormat)
         {

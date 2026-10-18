@@ -71,14 +71,14 @@ With several files selected, each one is converted separately; tools like “mer
 
 FileAction handles images, PDFs, spreadsheets, subtitles and archives on its own. Some formats need extra programs:
 
-- **FFmpeg** (audio and video) and **Pandoc** (documents) ship with the installer,
+- **FFmpeg** (audio and video, 34 MB) and **Pandoc** (documents, 35 MB) are downloaded the first time you need them: the wheel shows their slices dimmed with “get FFmpeg”, and dropping a file there asks once, downloads the tool (checked against its published SHA-256) and runs the conversion. If you already have them installed (e.g. `winget install Gyan.FFmpeg`), FileAction uses those,
 - **LibreOffice** (DOC, PPTX, ODS, documents and spreadsheets to PDF) has to be installed separately: `winget install TheDocumentFoundation.LibreOffice`.
 
-**Settings → Helper programs** shows what is missing and can install it for you. The wheel only offers conversions whose tools are available.
+**Settings → Helper programs** shows what is missing and can download or install it for you. Keeping the tools out of the installer keeps it under 50 MB.
 
 ## Install
 
-Download `FileAction-Setup-x.y.z.exe` from [Releases](../../releases), or from the artifacts of the latest [GitHub Actions](../../actions) run. The installer doesn't need admin rights. A portable `.zip` is available too.
+Download `FileAction-Setup-x.y.z.exe` from [Releases](../../releases), or from the artifacts of the latest [GitHub Actions](../../actions) run. The installer (under 50 MB) doesn't need admin rights. A portable `.zip` is available too.
 
 The app speaks English and Czech and comes in light and dark mode; both follow your Windows settings, and the language can be switched in Settings.
 
@@ -90,11 +90,9 @@ Requirements: Windows 10 (1809+) or Windows 11, x64.
 
 ## Linux
 
-```sh
-yay -S fileaction-bin        # Arch Linux (AUR)
-```
+**Arch Linux:** every release has a `PKGBUILD` attached (the `fileaction-bin` package). Download it into an empty folder and run `makepkg -si`. The package is coming to the AUR (`yay -S fileaction-bin`) as soon as AUR account registration reopens.
 
-Other distributions: download `FileAction-x.y.z-linux-x64.tar.gz` from [Releases](../../releases), unpack it and run `fileaction/app/fileaction` (no .NET needed).
+**Other distributions:** download `FileAction-x.y.z-linux-x64.tar.xz` (about 32 MB) from [Releases](../../releases), unpack it and run `fileaction/app/fileaction` (no .NET needed).
 
 Linux doesn't let apps watch the keyboard and mouse of other programs (Wayland forbids it on purpose), so the "drag and tap a key" gesture is Windows-only. On Linux you use the same wheel like this:
 
@@ -115,10 +113,9 @@ Optional packages: `ffmpeg` (audio, video), `pandoc-cli` (documents), `libreoffi
 
 ```powershell
 # .NET 10 SDK
-./scripts/fetch-tools.ps1                      # downloads ffmpeg.exe and pandoc.exe into .\tools
-dotnet test tests/FileAction.Tests             # conversion tests
-dotnet publish src/FileAction.App -c Release -r win-x64 --self-contained -o publish
-Copy-Item tools publish\tools -Recurse
+./scripts/fetch-tools.ps1                      # downloads ffmpeg.exe and pandoc.exe into .\tools (for the tests)
+$env:PATH = "$PWD\tools;$env:PATH"; dotnet test tests/FileAction.Tests
+dotnet publish src/FileAction.App -c Release -r win-x64 --self-contained -o publish   # trimmed, ~165 MB unpacked
 publish\FileAction.exe
 ```
 
@@ -148,6 +145,10 @@ tests/FileAction.Tests  unit tests plus integration tests that run every operati
 installer/              Inno Setup
 packaging/              Linux tarball and the AUR PKGBUILD template
 ```
+
+## License
+
+[MIT](LICENSE). FileAction uses other open-source components under their own licenses; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## Differences from Tangerine
 

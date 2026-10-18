@@ -8,6 +8,18 @@ public sealed class ToolLocator
 {
     private readonly Dictionary<ExternalTool, string?> _cache = new();
     private readonly string _appDir;
+    private readonly HashSet<ExternalTool> _assumed = [];
+
+    /// <summary>Where the Windows app downloads FFmpeg and Pandoc when they are needed.</summary>
+    public static string DownloadFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FileAction", "tools");
+
+    /// <summary>A view that pretends <paramref name="tools"/> are installed: "would this work after downloading X?"</summary>
+    public ToolLocator Assuming(IEnumerable<ExternalTool> tools)
+    {
+        var view = new ToolLocator(_appDir);
+        view._assumed.UnionWith(tools);
+        return view;
+    }
 
     public ToolLocator(string? appDir = null)
     {
@@ -53,7 +65,7 @@ public sealed class ToolLocator
         {
             if (!_cache.TryGetValue(tool, out var path))
                 _cache[tool] = path = Locate(tool);
-            return path;
+            return path ?? (_assumed.Contains(tool) ? "(assumed)" : null);
         }
     }
 
@@ -70,6 +82,7 @@ public sealed class ToolLocator
         var bundledName = IsWindows ? exe + ".exe" : exe;
         candidates.Add(Path.Combine(_appDir, "tools", bundledName));
         candidates.Add(Path.Combine(_appDir, bundledName));
+        candidates.Add(Path.Combine(DownloadFolder, bundledName));
 
         if (tool == ExternalTool.LibreOffice && IsWindows)
         {

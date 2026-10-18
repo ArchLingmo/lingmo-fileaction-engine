@@ -34,6 +34,9 @@ internal static class SelfTest
                 RenderAll(Path.Combine(outDir, folder), language == Language.English, log);
             }
 
+            log.AddRange(SmokeTest.Run(Path.Combine(outDir, "smoke")));
+            TestSettingsRoundTrip(log);
+            TestExplorerCom(log);
             TestDrops(log);
             TestOcr(outDir, log);
             TestUpdateCheck(log);
@@ -126,6 +129,24 @@ internal static class SelfTest
         var dialog = new ParameterDialog(trim, [new FileItem(N(@"C:\Videa\klip.mov", @"C:\Videos\clip.mov"))]);
         SaveWindow(dialog, Path.Combine(outDir, "trim-dialog.png"), 360);
         log.Add($"ok {Path.GetFileName(outDir)}/parameter dialog");
+    }
+
+    /// <summary>The settings file is written with source-generated JSON (no reflection in the trimmed build).</summary>
+    private static void TestSettingsRoundTrip(List<string> log)
+    {
+        var settings = new AppSettings { Hotkey = HotkeyPreset.CtrlAltW, FavoriteOperations = ["image.to.webp"], Language = Language.Czech };
+        var json = System.Text.Json.JsonSerializer.Serialize(settings, SettingsJson.Default.AppSettings);
+        var back = System.Text.Json.JsonSerializer.Deserialize(json, SettingsJson.Default.AppSettings)!;
+        Check(back.Hotkey == HotkeyPreset.CtrlAltW && back.FavoriteOperations.Single() == "image.to.webp" && back.Language == Language.Czech, "settings JSON round trip");
+        Check(json.Contains("\"CtrlAltW\""), "enums stored as names");
+        log.Add("ok settings json");
+    }
+
+    /// <summary>Reading the Explorer selection goes through late-bound COM, which trimming could break.</summary>
+    private static void TestExplorerCom(List<string> log)
+    {
+        var selection = Shell.ExplorerSelection.Get(IntPtr.Zero);
+        log.Add($"ok explorer COM ({selection.Count} selected)");
     }
 
     /// <summary>Virtual files (as browsers and Outlook drag them) and raw images become real files.</summary>

@@ -17,10 +17,24 @@
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <Version>1.0.0</Version>
     <SatelliteResourceLanguages>cs;en</SatelliteResourceLanguages>
+    <!--
+      Smaller download: trim only libraries marked as trim-safe (the .NET runtime, the Windows SDK projection…);
+      WPF, WinForms and our own code are kept whole. The UI self-test in CI runs conversions in the trimmed build.
+    -->
+    <!-- Explorer selection and Outlook drops use classic COM, which trimming turns off by default. -->
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <Product>FileAction</Product>
     <Description>Převod souborů přetažením na kruhové menu</Description>
     <!-- ThemeMode (Fluent) is still marked experimental. -->
     <NoWarn>$(NoWarn);WPF0001;WFO0003</NoWarn>
+  </PropertyGroup>
+
+  <!-- Only when publishing for a platform (trimming needs a runtime identifier). -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <_SuppressWpfTrimError>true</_SuppressWpfTrimError>
+    <_SuppressWinFormsTrimError>true</_SuppressWinFormsTrimError>
   </PropertyGroup>
 
   <ItemGroup>

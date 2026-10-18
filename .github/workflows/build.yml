@@ -71,7 +71,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Download ffmpeg and pandoc
+      - name: Download ffmpeg and pandoc (for the tests; the app downloads them on demand)
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -87,9 +87,7 @@ jobs:
         shell: pwsh
         run: |
           dotnet publish src/FileAction.App/FileAction.App.csproj -c Release -r win-x64 --self-contained -p:Version=$env:VERSION -o publish
-          New-Item -ItemType Directory -Force publish/tools | Out-Null
-          Copy-Item tools/* publish/tools/
-          Copy-Item THIRD-PARTY-NOTICES.md publish/
+          Copy-Item LICENSE, THIRD-PARTY-NOTICES.md publish/
 
       - name: UI self-test
         shell: pwsh
@@ -103,10 +101,8 @@ jobs:
         shell: pwsh
         run: |
           function Size($path) { (Get-ChildItem $path -Recurse -File | Measure-Object Length -Sum).Sum / 1MB }
-          $total = Size publish
-          $tools = Size publish/tools
-          "Publish folder: {0:N1} MB (helper tools {1:N1} MB, app + .NET runtime {2:N1} MB)" -f $total, $tools, ($total - $tools)
-          Get-ChildItem publish/tools | ForEach-Object { "  {0}: {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+          "Publish folder (app + trimmed .NET runtime): {0:N1} MB" -f (Size publish)
+          Get-ChildItem publish -File | Sort-Object Length -Descending | Select-Object -First 8 | ForEach-Object { "  {0}: {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
 
           # Start like after sign-in (no first-run window) and sample memory and CPU while idle.
           New-Item -ItemType Directory -Force "$env:APPDATA\FileAction" | Out-Null
@@ -132,6 +128,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
           Compress-Archive -Path publish/* -DestinationPath "artifacts/FileAction-$env:VERSION-win-x64.zip"
           Get-ChildItem artifacts | ForEach-Object { "{0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+          $setup = Get-Item "artifacts/FileAction-Setup-$env:VERSION.exe"
+          if ($setup.Length -gt 50MB) { throw ("The installer grew to {0:N1} MB (limit 50 MB)" -f ($setup.Length / 1MB)) }
 
       - uses: actions/upload-artifact@v4
         with:
@@ -171,6 +169,8 @@ jobs:
           packaging/make-linux-package.sh "$VERSION" publish-linux dist
           ls -la dist
           du -sh publish-linux
+          size=$(stat -c %s dist/*.tar.xz)
+          if [ "$size" -gt $((50 * 1024 * 1024)) ]; then echo "The tarball grew to $((size / 1048576)) MB (limit 50 MB)"; exit 1; fi
       - uses: actions/upload-artifact@v4
         with:
           name: FileAction-linux
@@ -198,8 +198,8 @@ jobs:
           pacman -Syu --noconfirm --needed base-devel
           useradd -m builder
           mkdir -p /build
-          cp dist/*.tar.gz /build/
-          tarball="$(basename dist/*.tar.gz)"
+          cp dist/*.tar.xz /build/
+          tarball="$(basename dist/*.tar.xz)"
           # Same PKGBUILD as on the AUR, but taking the tarball from this run instead of the release.
           sed "s|^source=.*|source=(\"$tarball\")|" dist/PKGBUILD > /build/PKGBUILD
           chown -R builder /build
@@ -269,7 +269,8 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/*
-            linux/*.tar.gz
+            linux/*.tar.xz
+            linux/PKGBUILD
       - name: Publish to the AUR
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}

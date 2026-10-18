@@ -7,7 +7,6 @@ namespace FileAction.Linux;
 /// <summary>Preferences in ~/.config/fileaction/settings.json (same names as on Windows).</summary>
 public sealed class LinuxSettings
 {
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Converters = { new JsonStringEnumConverter() } };
 
     /// <summary>$HOME; unlike GetFolderPath it doesn't come back empty when the folder is missing.</summary>
     public static string Home => Environment.GetEnvironmentVariable("HOME") is { Length: > 0 } home
@@ -40,7 +39,7 @@ public sealed class LinuxSettings
         try
         {
             if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize<LinuxSettings>(File.ReadAllText(FilePath), Json) ?? new LinuxSettings();
+                return JsonSerializer.Deserialize(File.ReadAllText(FilePath), LinuxSettingsJson.Default.LinuxSettings) ?? new LinuxSettings();
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
@@ -54,7 +53,7 @@ public sealed class LinuxSettings
         {
             Directory.CreateDirectory(Folder);
             var temp = FilePath + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(this, Json));
+            File.WriteAllText(temp, JsonSerializer.Serialize(this, LinuxSettingsJson.Default.LinuxSettings));
             File.Move(temp, FilePath, overwrite: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -62,3 +61,8 @@ public sealed class LinuxSettings
         }
     }
 }
+
+/// <summary>Source-generated JSON for the settings file (works in the trimmed build without reflection).</summary>
+[JsonSourceGenerationOptions(WriteIndented = true, UseStringEnumConverter = true)]
+[JsonSerializable(typeof(LinuxSettings))]
+internal sealed partial class LinuxSettingsJson : JsonSerializerContext;

@@ -19,6 +19,9 @@ internal sealed class SettingsWindow : Window
     public static Shell.Updater? Updater { get; set; }
 
     public static Func<IReadOnlyList<Operation>>? Operations { get; set; }
+
+    /// <summary>Downloads FFmpeg or Pandoc in the app (set by the app).</summary>
+    public static Func<ExternalTool, Task<bool>>? DownloadTool { get; set; }
     private readonly AppSettings _settings;
     private readonly ToolLocator _tools;
     private readonly Action _changed;
@@ -363,7 +366,13 @@ internal sealed class SettingsWindow : Window
                 ExternalTool.Pandoc => "JohnMacFarlane.Pandoc",
                 _ => "TheDocumentFoundation.LibreOffice",
             };
-            var install = Button(T("Nainstalovat", "Install"), () =>
+            var install = Shell.ToolInstaller.CanInstall(tool) && DownloadTool is not null
+                ? Button(T($"Stáhnout ({Shell.ToolInstaller.DownloadSize(tool)})", $"Download ({Shell.ToolInstaller.DownloadSize(tool)})"), async () =>
+                {
+                    if (await DownloadTool(tool))
+                        Rebuild();
+                }, primary: true, glyph: "\uE896")
+                : Button(T("Nainstalovat", "Install"), () =>
             {
                 try
                 {

@@ -68,9 +68,38 @@ internal sealed class WheelController
     /// <summary>The cross-platform catalog plus tools that need Windows itself (OCR).</summary>
     public static IReadOnlyList<Operation> BuildOperations() => [.. Catalog.Build(), new Ocr.OcrOperation()];
 
-    private IReadOnlyList<Operation> Operations(WheelKind wheel, IReadOnlyList<FileItem> items) =>
-        WheelLayout.Arrange(Catalog.For(wheel == WheelKind.Actions ? _actions : _coreOperations, wheel, items, _tools),
-            _settings.HiddenOperations, _settings.FavoriteOperations);
+    /// <summary>
+    /// What fits these items. Conversions that need FFmpeg or Pandoc stay on the wheel even before those are
+    /// downloaded; choosing one offers the download first.
+    /// </summary>
+    private IReadOnlyList<Operation> Operations(WheelKind wheel, IReadOnlyList<FileItem> items)
+    {
+        var offered = new List<Operation>();
+        foreach (var op in wheel == WheelKind.Actions ? _actions : _coreOperations)
+        {
+            if (op.Wheel != wheel || !op.AppliesTo(items))
+                continue;
+            if (op.IsAvailable(_tools, items))
+                offered.Add(op);
+            else if (MissingDownloads(op, items) is { } missing)
+                offered.Add(new NeedsToolOperation(op, missing));
+        }
+        return WheelLayout.Arrange(offered, _settings.HiddenOperations, _settings.FavoriteOperations);
+    }
+
+    /// <summary>The smallest set of downloadable tools that would make <paramref name="op"/> work, or null.</summary>
+    private IReadOnlyList<ExternalTool>? MissingDownloads(Operation op, IReadOnlyList<FileItem> items)
+    {
+        var missing = ToolInstaller.Installable.Where(t => !_tools.Has(t)).ToList();
+        if (missing.Count == 0)
+            return null;
+        foreach (var candidate in missing.Select(t => new[] { t }).Append(missing.ToArray()))
+        {
+            if (op.IsAvailable(_tools.Assuming(candidate), items))
+                return candidate;
+        }
+        return null;
+    }
 
     /// <summary>Every operation the wheels can show (for the wheel editor).</summary>
     public IReadOnlyList<Operation> AllOperations => [.. _coreOperations, .. _actions];

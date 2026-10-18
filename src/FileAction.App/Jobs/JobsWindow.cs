@@ -203,8 +203,13 @@ internal sealed class JobCard : Border
         ShowBadge(warning is null ? "\uE73E" : "\uE7BA", warning is null ? Theme.Success : Theme.Error);
         _status.Visibility = Visibility.Visible;
         _status.Foreground = warning is null ? Theme.Muted : Theme.Error;
-        _status.Text = warning ?? (outputs.Count == 1 ? T("Hotovo: ", "Done: ") + System.IO.Path.GetFileName(outputs[0]) : T($"Hotovo: {outputs.Count} výstupů", $"Done: {outputs.Count} outputs"));
-        if (warning is null && note is not null)
+        _status.Text = warning ?? outputs.Count switch
+        {
+            0 => note ?? T("Hotovo", "Done"),
+            1 => T("Hotovo: ", "Done: ") + System.IO.Path.GetFileName(outputs[0]),
+            _ => T($"Hotovo: {outputs.Count} výstupů", $"Done: {outputs.Count} outputs"),
+        };
+        if (warning is null && note is not null && outputs.Count > 0)
             _status.Text += Environment.NewLine + note;
         _buttons.Children.Clear();
         if (outputs.Count > 0)

@@ -26,6 +26,11 @@ public static class SelfTest
                 Palette.Override = dark;
                 RenderAll(Path.Combine(outDir, folder), language == Language.English, log);
             }
+            log.AddRange(SmokeTest.Run(Path.Combine(outDir, "smoke")));
+            var json = System.Text.Json.JsonSerializer.Serialize(new LinuxSettings { Language = Language.Czech }, LinuxSettingsJson.Default.LinuxSettings);
+            if (System.Text.Json.JsonSerializer.Deserialize(json, LinuxSettingsJson.Default.LinuxSettings)?.Language != Language.Czech)
+                throw new InvalidOperationException("settings JSON round trip");
+            log.Add("ok settings json");
             File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
             return 0;
         }

@@ -69,6 +69,7 @@ internal sealed class App : Application
         Theme.Refresh();
         _tools = new ToolLocator();
         var jobs = new JobRunner(_settings, _tools);
+        SettingsWindow.DownloadTool = tool => jobs.DownloadToolsAsync([tool], ask: false);
 
         _input = new GlobalInput(Dispatcher);
         try
