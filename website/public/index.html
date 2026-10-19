@@ -290,6 +290,16 @@
           <span><span data-l="en">E-mail (optional, only if you want a reply)</span><span data-l="cs">E-mail (nepovinný, jen pokud chcete odpověď)</span></span>
           <input type="email" name="email" maxlength="200" autocomplete="email" data-ph-en="you@example.com" data-ph-cs="vy@example.cz">
         </label>
+        <div class="field fb-shots-field">
+          <span><span data-l="en">Screenshots (optional, up to 3)</span><span data-l="cs">Snímky obrazovky (nepovinné, nejvýš 3)</span></span>
+          <div class="fb-shots" id="feedback-shots">
+            <label class="fb-shot-add" id="feedback-add">
+              <input type="file" id="feedback-files" accept="image/*" multiple>
+              <span><span data-l="en">+ Add image</span><span data-l="cs">+ Přidat obrázek</span></span>
+            </label>
+          </div>
+          <small class="fb-shots-hint"><span data-l="en">or paste one with Ctrl+V, or drop it here</span><span data-l="cs">nebo ho vložte přes Ctrl+V, případně přetáhněte sem</span></small>
+        </div>
         <!-- Left empty by people; bots that fill every field are ignored. -->
         <label class="hp" aria-hidden="true">Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label>
         <div class="feedback-end">
@@ -297,8 +307,8 @@
           <p class="feedback-status" id="feedback-status" role="status" aria-live="polite"></p>
         </div>
         <p class="small">
-          <span data-l="en">Only what you type is sent, plus the page language. Your IP address isn't stored.</span>
-          <span data-l="cs">Odešle se jen to, co napíšete, a jazyk stránky. IP adresa se neukládá.</span>
+          <span data-l="en">Only what you type and attach is sent, plus the page language. Images are shrunk in your browser and stripped of metadata such as location. Your IP address isn't stored.</span>
+          <span data-l="cs">Odešle se jen to, co napíšete a přiložíte, a jazyk stránky. Obrázky se zmenší už v prohlížeči a zmizí z nich metadata jako poloha. IP adresa se neukládá.</span>
         </p>
       </form>
     </section>

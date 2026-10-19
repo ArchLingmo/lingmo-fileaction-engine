@@ -1,9 +1,11 @@
+using System.IO;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using static FileAction.App.UI.Controls;
 using static FileAction.Core.Loc;
@@ -11,8 +13,9 @@ using static FileAction.Core.Loc;
 namespace FileAction.App.UI;
 
 /// <summary>
-/// Sends a bug report or an idea to the author. Only what the user types is sent, plus the
-/// FileAction and Windows versions (shown in the window), never files or paths.
+/// Sends a bug report or an idea to the author. Only what the user types and the images they attach
+/// are sent, plus the FileAction and Windows versions (shown in the window), never other files or paths.
+/// Images are shrunk and re-encoded here, which also drops their metadata (EXIF location and the like).
 /// </summary>
 internal sealed class FeedbackWindow : Window
 {
@@ -25,6 +28,11 @@ internal sealed class FeedbackWindow : Window
     private readonly TextBlock _status = Text("", 13, wrap: true);
     private readonly Border _send;
     private string _kind = "bug";
+    private const int MaxImages = 3;
+    private const int MaxBytes = 2_400_000;   // the server takes 2.5 MB per image
+    private const int MaxSide = 2560;
+    private readonly List<(string Name, string Type, byte[] Data)> _images = [];
+    private readonly WrapPanel _thumbs = new() { Orientation = Orientation.Horizontal };
     private bool _sending;
 
     internal FeedbackWindow()
@@ -58,11 +66,24 @@ internal sealed class FeedbackWindow : Window
         root.Children.Add(Label(T("Zpráva", "Message")));
         _message.Height = 150;
         root.Children.Add(_message);
+        // Screenshots: pick a file or paste one (Win+Shift+S, then Ctrl+V).
+        root.Children.Add(Label(T("Snímky obrazovky (nepovinné, nejvýš 3)", "Screenshots (optional, up to 3)")));
+        var add = Button(T("Přidat obrázek…", "Add image…"), PickImages, glyph: "\uEB9F");
+        var paste = Text(T("nebo Ctrl+V", "or Ctrl+V"), 12, brush: Theme.Muted);
+        paste.VerticalAlignment = VerticalAlignment.Center;
+        paste.Margin = new Thickness(12, 0, 0, 0);
+        var shotsRow = new StackPanel { Orientation = Orientation.Horizontal };
+        shotsRow.Children.Add(add);
+        shotsRow.Children.Add(paste);
+        root.Children.Add(shotsRow);
+        _thumbs.Margin = new Thickness(0, 8, 0, 0);
+        root.Children.Add(_thumbs);
+
         root.Children.Add(Label(T("E-mail (nepovinný, jen pokud chcete odpověď)", "E-mail (optional, only if you want a reply)")));
         root.Children.Add(_email);
 
-        var privacy = Text(T($"Spolu se zprávou se odešle verze FileAction {Shell.Updater.Current} a {WindowsVersion()}. Žádné soubory ani cesty.",
-                             $"Sent along with your message: FileAction {Shell.Updater.Current} and {WindowsVersion()}. No files or paths."), 12, brush: Theme.Muted);
+        var privacy = Text(T($"Spolu se zprávou se odešle verze FileAction {Shell.Updater.Current} a {WindowsVersion()}, případně přiložené obrázky (zkontrolujte, jestli na nich nejsou osobní údaje). Žádné jiné soubory ani cesty.",
+                             $"Sent along with your message: FileAction {Shell.Updater.Current}, {WindowsVersion()} and any images you attach (check them for personal details). No other files or paths."), 12, brush: Theme.Muted);
         privacy.Margin = new Thickness(0, 12, 0, 0);
         root.Children.Add(privacy);
 
@@ -92,6 +113,23 @@ internal sealed class FeedbackWindow : Window
             if (e.Key == Key.Escape)
                 Close();
         };
+        // Ctrl+V with an image (or image files) on the clipboard attaches it; text pastes as usual.
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key != Key.V || (Keyboard.Modifiers & ModifierKeys.Control) == 0)
+                return;
+            if (Clipboard.ContainsImage() && Clipboard.GetImage() is { } image)
+            {
+                Attach(() => Encode(image, preferPng: true));
+                e.Handled = true;
+            }
+            else if (Clipboard.ContainsFileDropList())
+            {
+                foreach (var file in Clipboard.GetFileDropList().Cast<string>().Where(IsImage))
+                    Attach(() => FromFile(file));
+                e.Handled = true;
+            }
+        };
         Loaded += (_, _) =>
         {
             ForegroundHelper.Force(this);
@@ -106,6 +144,117 @@ internal sealed class FeedbackWindow : Window
         _open.Show();
         _open.Activate();
     }
+
+    private static bool IsImage(string path) =>
+        System.IO.Path.GetExtension(path).ToLowerInvariant() is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".tif" or ".tiff" or ".webp" or ".heic";
+
+    private void PickImages()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Multiselect = true,
+            Filter = T("Obrázky", "Images") + "|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff;*.webp;*.heic",
+        };
+        if (dialog.ShowDialog(this) != true)
+            return;
+        foreach (var file in dialog.FileNames)
+            Attach(() => FromFile(file));
+    }
+
+    private static (string, string, byte[]) FromFile(string path)
+    {
+        var frame = BitmapDecoder.Create(new Uri(path), BitmapCreateOptions.IgnoreColorProfile, BitmapCacheOption.OnLoad).Frames[0];
+        var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+        return Encode(frame, preferPng: ext is ".png" or ".bmp" or ".gif");
+    }
+
+    /// <summary>Shrinks to at most 2560 px and re-encodes (new frame = no metadata): PNG for screenshots when it fits, JPEG otherwise.</summary>
+    private static (string, string, byte[]) Encode(BitmapSource source, bool preferPng)
+    {
+        double k = Math.Min(1, (double)MaxSide / Math.Max(source.PixelWidth, source.PixelHeight));
+        BitmapSource scaled = k < 1 ? new TransformedBitmap(source, new ScaleTransform(k, k)) : source;
+        if (preferPng)
+        {
+            var png = Save(new PngBitmapEncoder(), scaled);
+            if (png.Length <= MaxBytes)
+                return ("screenshot.png", "image/png", png);
+        }
+        // JPEG has no transparency: flatten onto white.
+        var flat = new FormatConvertedBitmap(scaled, PixelFormats.Bgr24, null, 0);
+        foreach (var quality in new[] { 85, 72, 60 })
+        {
+            var jpg = Save(new JpegBitmapEncoder { QualityLevel = quality }, flat);
+            if (jpg.Length <= MaxBytes)
+                return ("screenshot.jpg", "image/jpeg", jpg);
+        }
+        throw new InvalidOperationException("too big");
+    }
+
+    private static byte[] Save(BitmapEncoder encoder, BitmapSource source)
+    {
+        encoder.Frames.Add(BitmapFrame.Create(source));
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+        return stream.ToArray();
+    }
+
+    private void Attach(Func<(string Name, string Type, byte[] Data)> make)
+    {
+        if (_images.Count >= MaxImages)
+        {
+            Say(T("Nejvýš 3 obrázky.", "Up to 3 images."), true);
+            return;
+        }
+        (string Name, string Type, byte[] Data) image;
+        try
+        {
+            image = make();
+        }
+        catch (Exception ex) when (ex is NotSupportedException or FileFormatException or IOException or InvalidOperationException or ArgumentException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
+        {
+            Say(T("Tenhle obrázek nejde použít.", "That image can't be used."), true);
+            return;
+        }
+        _images.Add(image);
+        var preview = new BitmapImage();
+        preview.BeginInit();
+        preview.StreamSource = new MemoryStream(image.Data);
+        preview.DecodePixelHeight = 128;
+        preview.CacheOption = BitmapCacheOption.OnLoad;
+        preview.EndInit();
+        var thumb = new Grid { Width = 96, Height = 64, Margin = new Thickness(0, 0, 8, 0) };
+        thumb.Children.Add(new Border
+        {
+            CornerRadius = new CornerRadius(8),
+            BorderBrush = Theme.PanelBorder,
+            BorderThickness = new Thickness(1),
+            Background = new ImageBrush(preview) { Stretch = Stretch.UniformToFill },
+        });
+        var remove = new Border
+        {
+            Width = 20,
+            Height = 20,
+            CornerRadius = new CornerRadius(10),
+            Background = new SolidColorBrush(Color.FromArgb(0xB0, 0, 0, 0)),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 4, 4, 0),
+            Cursor = Cursors.Hand,
+            ToolTip = T("Odebrat", "Remove"),
+            Child = new TextBlock { Text = "\uE711", FontFamily = Theme.Icons, FontSize = 9, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+        };
+        remove.MouseLeftButtonUp += (_, _) =>
+        {
+            _images.Remove(image);
+            _thumbs.Children.Remove(thumb);
+        };
+        thumb.Children.Add(remove);
+        _thumbs.Children.Add(thumb);
+        _status.Text = "";
+    }
+
+    /// <summary>For the self-test: attaches an image as if it were pasted.</summary>
+    internal void AttachForPreview(BitmapSource image) => Attach(() => Encode(image, preferPng: true));
 
     private static TextBlock Label(string text)
     {
@@ -172,14 +321,27 @@ internal sealed class FeedbackWindow : Window
                 ["version"] = Shell.Updater.Current.ToString(),
                 ["os"] = WindowsVersion(),
                 ["lang"] = Current == Core.Language.Czech ? "cs" : "en",
+                ["attachments"] = new JsonArray(_images.Select(i => (JsonNode)new JsonObject
+                {
+                    ["name"] = i.Name,
+                    ["type"] = i.Type,
+                    ["data"] = Convert.ToBase64String(i.Data),
+                }).ToArray()),
             };
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+            // With screenshots this can be a few MB, which takes a while on a slow uplink.
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(120) };
             http.DefaultRequestHeaders.UserAgent.ParseAdd($"FileAction/{Shell.Updater.Current}");
             using var response = await http.PostAsync(Endpoint, new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"));
             if (response.IsSuccessStatusCode)
             {
                 _message.Clear();
+                _images.Clear();
+                _thumbs.Children.Clear();
                 Say(T("Díky! Zpráva je odeslaná.", "Thank you! Your message has been sent."), false);
+            }
+            else if ((int)response.StatusCode == 413 || (await response.Content.ReadAsStringAsync()).Contains("\"attachment"))
+            {
+                Say(T("Server obrázek nepřijal. Zkuste jiný.", "The server didn't accept an image. Try a different one."), true);
             }
             else if ((int)response.StatusCode == 429)
             {

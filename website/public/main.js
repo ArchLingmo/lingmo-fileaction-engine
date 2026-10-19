@@ -457,6 +457,86 @@
       status.textContent = lang === "cs" ? cs : en;
       status.className = "feedback-status " + (ok ? "ok" : "err");
     };
+
+    // Snímky obrazovky: zmenšení a převod v prohlížeči (nové plátno = bez EXIF a jiných metadat).
+    const MAX_SHOTS = 3, MAX_BYTES = 2400000, MAX_SIDE = 2560;
+    const shots = [];
+    const shotsBox = $("#feedback-shots"), addBox = $("#feedback-add"), files = $("#feedback-files");
+    const toBlob = (canvas, type, q) => new Promise(res => canvas.toBlob(res, type, q));
+    const toBase64 = blob => new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(String(fr.result));
+      fr.onerror = rej;
+      fr.readAsDataURL(blob);
+    });
+    async function prepare(file) {
+      const bmp = await createImageBitmap(file);
+      const k = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bmp.width * k));
+      canvas.height = Math.max(1, Math.round(bmp.height * k));
+      const g = canvas.getContext("2d");
+      let blob = null;
+      if (file.type === "image/png") {
+        g.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+        blob = await toBlob(canvas, "image/png");
+        if (blob && blob.size > MAX_BYTES) blob = null;
+      }
+      if (!blob) {
+        g.fillStyle = "#fff";
+        g.fillRect(0, 0, canvas.width, canvas.height);
+        g.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+        for (const q of [0.85, 0.72, 0.6]) {
+          blob = await toBlob(canvas, "image/jpeg", q);
+          if (blob && blob.size <= MAX_BYTES) break;
+        }
+      }
+      bmp.close();
+      if (!blob || blob.size > MAX_BYTES) throw new Error("too big");
+      const url = await toBase64(blob);
+      const type = blob.type === "image/png" ? "image/png" : "image/jpeg";
+      return { name: "screenshot" + (type === "image/png" ? ".png" : ".jpg"), type, url, data: url.slice(url.indexOf(",") + 1) };
+    }
+    function drawShots() {
+      shotsBox.querySelectorAll(".fb-shot").forEach(el => el.remove());
+      for (const s of shots) {
+        const box = document.createElement("div");
+        box.className = "fb-shot";
+        const img = document.createElement("img");
+        img.src = s.url;
+        img.alt = "";
+        const x = document.createElement("button");
+        x.type = "button";
+        x.textContent = "✕";
+        x.setAttribute("aria-label", lang === "cs" ? "Odebrat obrázek" : "Remove image");
+        x.addEventListener("click", () => { shots.splice(shots.indexOf(s), 1); drawShots(); });
+        box.append(img, x);
+        shotsBox.insertBefore(box, addBox);
+      }
+      addBox.hidden = shots.length >= MAX_SHOTS;
+    }
+    async function addFiles(list) {
+      for (const f of list) {
+        if (!f.type.startsWith("image/")) continue;
+        if (shots.length >= MAX_SHOTS) return say("Up to 3 images.", "Nejvýš 3 obrázky.", false);
+        try {
+          shots.push(await prepare(f));
+          drawShots();
+        } catch {
+          say("That image can't be used.", "Tenhle obrázek nejde použít.", false);
+        }
+      }
+    }
+    if (shotsBox) {
+      files.addEventListener("change", () => { addFiles([...files.files]); files.value = ""; });
+      form.addEventListener("paste", e => {
+        const list = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith("image/"));
+        if (list.length) { e.preventDefault(); addFiles(list); }
+      });
+      shotsBox.addEventListener("dragover", e => { e.preventDefault(); shotsBox.classList.add("drag"); });
+      shotsBox.addEventListener("dragleave", () => shotsBox.classList.remove("drag"));
+      shotsBox.addEventListener("drop", e => { e.preventDefault(); shotsBox.classList.remove("drag"); addFiles([...e.dataTransfer.files]); });
+    }
     form.addEventListener("submit", async e => {
       e.preventDefault();
       const data = new FormData(form);
@@ -471,11 +551,18 @@
         const r = await fetch("/api/feedback", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ kind: data.get("kind"), message, email, website: data.get("website"), source: "web", lang }),
+          body: JSON.stringify({
+            kind: data.get("kind"), message, email, website: data.get("website"), source: "web", lang,
+            attachments: shots.map(s => ({ name: s.name, type: s.type, data: s.data })),
+          }),
         });
         if (r.ok) {
           form.reset();
+          shots.length = 0;
+          if (shotsBox) drawShots();
           say("Thank you! Your message has been sent.", "Díky! Zpráva je odeslaná.", true);
+        } else if (r.status === 413 || (r.status === 400 && /attachment/.test(await r.text()))) {
+          say("The server didn't accept an image. Try a different one.", "Server obrázek nepřijal. Zkuste jiný.", false);
         } else if (r.status === 429) {
           say("Too many messages in a short time. Try again in a few minutes.", "Moc zpráv za krátkou dobu. Zkuste to za pár minut.", false);
         } else {

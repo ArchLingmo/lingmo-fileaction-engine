@@ -125,6 +125,13 @@ internal static class SelfTest
         log.Add($"ok {Path.GetFileName(outDir)}/settings-wheels-tools");
 
         var feedback = new FeedbackWindow();
+        // A pasted screenshot: exercises shrinking and PNG encoding in the trimmed build.
+        var shot = new RenderTargetBitmap(1600, 1000, 96, 96, PixelFormats.Pbgra32);
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+            dc.DrawRectangle(new LinearGradientBrush(Colors.DarkOrange, Colors.MediumVioletRed, 30), null, new Rect(0, 0, 1600, 1000));
+        shot.Render(visual);
+        feedback.AttachForPreview(shot);
         SaveWindow(feedback, Path.Combine(outDir, "feedback.png"), 560);
         feedback.Close();
         log.Add($"ok {Path.GetFileName(outDir)}/feedback");
