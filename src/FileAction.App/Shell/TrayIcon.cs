@@ -12,7 +12,7 @@ internal sealed class TrayIcon : IDisposable
     private Forms.ToolStripMenuItem? _update;
     private Action? _balloonClick;
 
-    public TrayIcon(Action openSettings, Action openClipboard, Action openShelf, Action showHelp, Action<bool> setPaused, bool paused, Action exit)
+    public TrayIcon(Action openSettings, Action openClipboard, Action openShelf, Action showHelp, Action sendFeedback, Action<bool> setPaused, bool paused, Action exit)
     {
         var stream = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/Assets/FileAction.ico"))!.Stream;
         var menu = new Forms.ContextMenuStrip();
@@ -20,6 +20,7 @@ internal sealed class TrayIcon : IDisposable
         menu.Items.Add(T("Nastavení…", "Settings…"), null, (_, _) => openSettings());
         menu.Items.Add(T("Prázdný plovoucí panel", "Empty floating shelf"), null, (_, _) => openShelf());
         menu.Items.Add(T("Jak to funguje", "How it works"), null, (_, _) => showHelp());
+        menu.Items.Add(T("Napsat zpětnou vazbu…", "Send feedback…"), null, (_, _) => sendFeedback());
         _pause = new Forms.ToolStripMenuItem(T("Pozastavit gesta", "Pause gestures")) { Checked = paused, CheckOnClick = true };
         _pause.CheckedChanged += (_, _) => setPaused(_pause.Checked);
         menu.Items.Add(_pause);

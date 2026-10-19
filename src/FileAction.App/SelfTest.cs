@@ -110,6 +110,11 @@ internal static class SelfTest
         toolsWheel.Close();
         log.Add($"ok {Path.GetFileName(outDir)}/settings-wheels-tools");
 
+        var feedback = new FeedbackWindow();
+        SaveWindow(feedback, Path.Combine(outDir, "feedback.png"), 560);
+        feedback.Close();
+        log.Add($"ok {Path.GetFileName(outDir)}/feedback");
+
         var jobs = new JobsWindow();
         var running = jobs.Add(N("Převod na MP4", "Convert to MP4"), N("klip.mov", "clip.mov"), () => { }, @"C:\x.mov");
         running.Report(0.42);

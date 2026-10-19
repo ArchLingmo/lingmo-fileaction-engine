@@ -423,27 +423,20 @@ internal sealed partial class SettingsWindow : Window
                 Save();
             }), glyph: ""));
 
+        root.Children.Add(SectionHeader(T("Zpětná vazba", "Feedback")));
+        root.Children.Add(Card(T("Napsat zpětnou vazbu", "Send feedback"),
+            T("Chyba, nápad nebo otázka. Zpráva dorazí přímo autorovi.", "A bug, an idea or a question. It goes straight to the author."),
+            Button(T("Napsat…", "Write…"), FeedbackWindow.ShowSingle, primary: true, glyph: ""), glyph: ""));
+
         root.Children.Add(SectionHeader(T("Odkazy", "Links")));
         root.Children.Add(Card(T("Web", "Website"), "fileaction.apexpiksel.cz",
-            Button(T("Otevřít", "Open"), () => OpenUrl("https://fileaction.apexpiksel.cz"), glyph: ""), glyph: ""));
+            Button(T("Otevřít", "Open"), () => Shell.Updater.Open(FeedbackWindow.Website), glyph: ""), glyph: ""));
         root.Children.Add(Card(T("Zdrojový kód", "Source code"), "github.com/" + UpdateInfo.Repository,
-            Button(T("Otevřít", "Open"), () => OpenUrl("https://github.com/" + UpdateInfo.Repository), glyph: ""), glyph: ""));
+            Button(T("Otevřít", "Open"), () => Shell.Updater.Open("https://github.com/" + UpdateInfo.Repository), glyph: ""), glyph: ""));
 
         var footer = Text(T("Vše běží lokálně, soubory se nikam neodesílají.", "Everything runs locally, files never leave your PC."), 12, brush: Theme.Muted);
         footer.Margin = new Thickness(2, 24, 0, 0);
         root.Children.Add(footer);
-    }
-
-    private void OpenUrl(string url)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-        }
-        catch (System.ComponentModel.Win32Exception ex)
-        {
-            MessageBox.Show(this, ex.Message, "FileAction", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
     }
 
     // ------------------------------------------------------------------ helpers

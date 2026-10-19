@@ -19,6 +19,7 @@
     lang = value === "cs" ? "cs" : "en";
     root.dataset.lang = lang;
     root.lang = lang;
+    $$("[data-ph-en]").forEach(el => { el.placeholder = el.dataset[lang === "cs" ? "phCs" : "phEn"]; });
     renderCaption();
   };
   $("#lang-toggle").addEventListener("click", () => {
@@ -447,7 +448,49 @@
     if (open) wheel.classList.add("open");
   });
 
+  // ---------- Feedback ----------
+  function feedback() {
+    const form = $("#feedback-form");
+    if (!form) return;
+    const status = $("#feedback-status");
+    const say = (en, cs, ok) => {
+      status.textContent = lang === "cs" ? cs : en;
+      status.className = "feedback-status " + (ok ? "ok" : "err");
+    };
+    form.addEventListener("submit", async e => {
+      e.preventDefault();
+      const data = new FormData(form);
+      const message = String(data.get("message") || "").trim();
+      const email = String(data.get("email") || "").trim();
+      if (message.length < 3) return say("Please write a few words first.", "Napište prosím aspoň pár slov.", false);
+      if (email && !form.elements.email.checkValidity()) return say("That e-mail doesn't look right.", "Ten e-mail nevypadá správně.", false);
+      const button = form.querySelector("button[type=submit]");
+      button.disabled = true;
+      say("Sending…", "Odesílám…", true);
+      try {
+        const r = await fetch("/api/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: data.get("kind"), message, email, website: data.get("website"), source: "web", lang }),
+        });
+        if (r.ok) {
+          form.reset();
+          say("Thank you! Your message has been sent.", "Díky! Zpráva je odeslaná.", true);
+        } else if (r.status === 429) {
+          say("Too many messages in a short time. Try again in a few minutes.", "Moc zpráv za krátkou dobu. Zkuste to za pár minut.", false);
+        } else {
+          say("Sending failed. Please try again later.", "Odeslání se nepovedlo. Zkuste to prosím později.", false);
+        }
+      } catch {
+        say("Sending failed. Check your connection and try again.", "Odeslání se nepovedlo. Zkontrolujte připojení a zkuste to znovu.", false);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+
   setLang(lang);
+  feedback();
   primaryForLinux();
   loadRelease();
   reveal();
