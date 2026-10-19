@@ -667,6 +667,27 @@ internal sealed class WheelWindow : Window
         return new Viewbox { Child = canvas, Stretch = Stretch.Uniform };
     }
 
+    /// <summary>
+    /// Where <paramref name="p"/> (in the coordinates of the canvas inside <see cref="Preview"/>) falls on a
+    /// wheel of <paramref name="count"/> slices: the slice index, or -1 in the hub or off the wheel.
+    /// </summary>
+    internal static int PreviewSliceAt(Point p, int count, out bool offWheel)
+    {
+        var dx = p.X - Size / 2;
+        var dy = p.Y - Size / 2;
+        var r = Math.Sqrt(dx * dx + dy * dy);
+        offWheel = r > OuterRadius + Rim + Pad;
+        if (offWheel || r < InnerRadius || count == 0)
+            return -1;
+        var angle = (Math.Atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+        var step = 360.0 / count;
+        return (int)(((angle + step / 2) % 360) / step) % count;
+    }
+
+    /// <summary>The middle of slice <paramref name="index"/> on a wheel of <paramref name="count"/>, in preview canvas coordinates.</summary>
+    internal static Point SliceCenter(int index, int count) =>
+        Polar(InnerRadius + (OuterRadius - InnerRadius) * 0.54, count <= 1 ? 0 : index * 360.0 / count);
+
     /// <summary>Slices grow out of the centre one after another.</summary>
     private void AnimateSlicesIn()
     {

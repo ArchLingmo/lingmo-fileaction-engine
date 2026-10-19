@@ -21,6 +21,7 @@ internal static class SelfTest
     public static int Run(string outDir)
     {
         var log = new List<string>();
+        AppSettings.SavingDisabled = true;
         try
         {
             Directory.CreateDirectory(outDir);
@@ -36,7 +37,7 @@ internal static class SelfTest
 
             log.AddRange(SmokeTest.Run(Path.Combine(outDir, "smoke")));
             // Saved after every step, so a hard crash (which skips the catch below) still shows where it stopped.
-            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestWatchFolder(outDir, log), () => TestOcr(outDir, log), () => TestUpdateCheck(log) })
+            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestWatchFolder(outDir, log), () => TestWheelDrag(outDir, log), () => TestOcr(outDir, log), () => TestUpdateCheck(log) })
             {
                 File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
                 step();
@@ -92,12 +93,13 @@ internal static class SelfTest
         }
 
         SettingsWindow.Operations = () => [.. core, .. actions];
-        settings.FavoriteOperations = ["image.to.webp", "image.compress"];
+        settings.OperationOrder = ["image.to.webp", "image.compress"];
+        settings.WheelOverrides = new() { ["image.half"] = WheelKind.Convert };
         settings.HiddenOperations = ["image.to.tiff"];
         var web = new Preset { Name = "Web 1920", Kind = PresetKind.Image, Format = "jpg", Quality = 80, MaxSide = 1920, StripMetadata = true };
         settings.Presets = [web, new Preset { Name = N("MP4 malé", "MP4 small"), Kind = PresetKind.Video, Format = "mp4", Height = 720, VideoQuality = VideoQuality.Small }];
         settings.WatchFolders = [new WatchFolder { Path = N(@"C:\Users\Jana\Pictures\Snímky obrazovky", @"C:\Users\Jana\Pictures\Screenshots"), OperationId = "preset." + web.Id }];
-        SettingsWindow.Operations = () => [.. core, .. settings.Presets.Select(PresetOperations.Build), .. actions];
+        SettingsWindow.Operations = () => RelocatedOperation.Apply([.. core, .. settings.Presets.Select(PresetOperations.Build), .. actions], settings.WheelOverrides);
         foreach (var page in Enum.GetValues<SettingsPage>())
         {
             var settingsWindow = new SettingsWindow(settings, tools, () => { }) { Page = page };
@@ -139,7 +141,7 @@ internal static class SelfTest
         // Customised wheel and the "repeat last" view.
         var photo = new List<FileItem> { new(N(@"C:\Fotky\dovolená.jpg", @"C:\Photos\vacation.jpg")) };
         IReadOnlyList<Operation> Arranged(WheelKind wheel, IReadOnlyList<FileItem> items) =>
-            WheelLayout.Arrange(Source(wheel, items), settings.HiddenOperations, settings.FavoriteOperations);
+            WheelLayout.Arrange(Source(wheel, items), settings.HiddenOperations, settings.OperationOrder);
         var custom = new WheelWindow(WheelMode.Drag, WheelKind.Convert, photo, settings, Arranged, (_, _) => { });
         Check(custom.CurrentWheel == WheelKind.Convert, "custom wheel");
         custom.RenderPreview(Path.Combine(outDir, "wheel-customized.png"), 0);
@@ -160,10 +162,21 @@ internal static class SelfTest
     /// <summary>The settings file is written with source-generated JSON (no reflection in the trimmed build).</summary>
     private static void TestSettingsRoundTrip(List<string> log)
     {
-        var settings = new AppSettings { Hotkey = HotkeyPreset.CtrlAltW, FavoriteOperations = ["image.to.webp"], Language = Language.Czech };
+        var settings = new AppSettings
+        {
+            Hotkey = HotkeyPreset.CtrlAltW,
+            OperationOrder = ["image.to.webp"],
+            WheelOverrides = new() { ["image.compress"] = WheelKind.Convert },
+            Language = Language.Czech,
+        };
         var json = System.Text.Json.JsonSerializer.Serialize(settings, SettingsJson.Default.AppSettings);
         var back = System.Text.Json.JsonSerializer.Deserialize(json, SettingsJson.Default.AppSettings)!;
-        Check(back.Hotkey == HotkeyPreset.CtrlAltW && back.FavoriteOperations.Single() == "image.to.webp" && back.Language == Language.Czech, "settings JSON round trip");
+        Check(back.Hotkey == HotkeyPreset.CtrlAltW && back.OperationOrder.Single() == "image.to.webp" && back.Language == Language.Czech
+              && back.WheelOverrides["image.compress"] == WheelKind.Convert, "settings JSON round trip");
+        // Stars from 1.6 and older become the start of the slice order.
+        var old = System.Text.Json.JsonSerializer.Deserialize("""{"FavoriteOperations":["video.to.mp4"],"OperationOrder":["image.to.png"]}""", SettingsJson.Default.AppSettings)!;
+        var migrated = AppSettings.Migrate(old);
+        Check(migrated.OperationOrder.SequenceEqual(["video.to.mp4", "image.to.png"]) && migrated.FavoriteOperations.Count == 0, "stars migrated to the slice order");
         Check(json.Contains("\"CtrlAltW\""), "enums stored as names");
         log.Add("ok settings json");
     }
@@ -265,6 +278,70 @@ internal static class SelfTest
         var files = Directory.GetFiles(folder).Select(f => Path.GetFileName(f)).Order().ToList();
         Check(files.SequenceEqual(["movie.mp4.crdownload", "shot (Watch).png", "shot.png"]), "only one result: " + string.Join(", ", files));
         log.Add("ok watched folder");
+    }
+
+    /// <summary>
+    /// Arranges the image Convert wheel by dragging, through the same code the mouse uses, on a real
+    /// (off-screen) settings window: reorder, hide, bring back from the library, move to another wheel.
+    /// </summary>
+    private static void TestWheelDrag(string outDir, List<string> log)
+    {
+        Loc.Current = Language.English;
+        Theme.Refresh();
+        var settings = new AppSettings();
+        var core = WheelController.BuildOperations();
+        var actions = FileActions.Build(settings, () => { });
+        SettingsWindow.Operations = () => RelocatedOperation.Apply([.. core, .. actions], settings.WheelOverrides);
+        var window = new SettingsWindow(settings, new ToolLocator(), () => { })
+        {
+            Left = -20000,
+            Top = -20000,
+            Width = 1240,
+            Height = 900,
+            ShowActivated = false,
+            ShowInTaskbar = false,
+        };
+        window.Show();
+        window.ShowWheel(WheelKind.Convert, 0);
+        window.UpdateLayout();
+        try
+        {
+            var ids = window.VisibleSliceIds;
+            Check(ids.Count >= 5, "image wheel has slices");
+
+            // 1. The fourth slice dropped on the first place.
+            var fourth = ids[3];
+            window.SimulateDrag(window.LibraryOperation(fourth), true, window.SlicePoint(3, ids.Count), window.SlicePoint(0, ids.Count));
+            window.UpdateLayout();
+            Check(window.VisibleSliceIds[0] == fourth && settings.OperationOrder[0] == fourth, "reordered by dragging");
+
+            // 2. The second slice dropped off the wheel (on the sidebar) gets hidden.
+            ids = window.VisibleSliceIds;
+            var second = ids[1];
+            window.SimulateDrag(window.LibraryOperation(second), true, window.SlicePoint(1, ids.Count), new Point(40, 40));
+            window.UpdateLayout();
+            Check(settings.HiddenOperations.Contains(second) && !window.VisibleSliceIds.Contains(second), "hidden by dropping off the wheel");
+
+            // 3. Back from the library onto the third place.
+            ids = window.VisibleSliceIds;
+            window.SimulateDrag(window.LibraryOperation(second), false, new Point(1100, 400), window.SlicePoint(2, ids.Count + 1));
+            window.UpdateLayout();
+            Check(!settings.HiddenOperations.Contains(second) && window.VisibleSliceIds[2] == second, "brought back from the library");
+
+            // 4. Onto the Tools tab: the slice moves to the Tools wheel.
+            ids = window.VisibleSliceIds;
+            var moved = ids[0];
+            window.SimulateDrag(window.LibraryOperation(moved), true, window.SlicePoint(0, ids.Count), window.TabPoint(WheelKind.Tools));
+            window.UpdateLayout();
+            Check(settings.WheelOverrides.TryGetValue(moved, out var wheel) && wheel == WheelKind.Tools && !window.VisibleSliceIds.Contains(moved), "moved to another wheel");
+
+            window.ExpandForPreview();
+            log.Add("ok wheel drag (reorder, hide, restore, move)");
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 
     /// <summary>Runs the dispatcher (async continuations, the watcher's callbacks) until done or timed out.</summary>

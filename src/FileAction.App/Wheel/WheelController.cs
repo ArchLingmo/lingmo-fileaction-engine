@@ -30,8 +30,8 @@ internal sealed class WheelController
         _tools = tools;
         _jobs = jobs;
         _input = input;
-        _coreOperations = BuildOperations(settings);
-        _actions = FileActions.Build(settings, settings.Save);
+        _coreOperations = RelocatedOperation.Apply(BuildOperations(settings), settings.WheelOverrides);
+        _actions = RelocatedOperation.Apply(FileActions.Build(settings, settings.Save), settings.WheelOverrides);
 
         // Explorer starts one process per selected file; gather paths that arrive close together.
         _argsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
@@ -64,8 +64,8 @@ internal sealed class WheelController
     /// </summary>
     public void Reload()
     {
-        _coreOperations = BuildOperations(_settings);
-        _actions = FileActions.Build(_settings, _settings.Save);
+        _coreOperations = RelocatedOperation.Apply(BuildOperations(_settings), _settings.WheelOverrides);
+        _actions = RelocatedOperation.Apply(FileActions.Build(_settings, _settings.Save), _settings.WheelOverrides);
     }
 
     /// <summary>The cross-platform catalog plus tools that need Windows itself (OCR).</summary>
@@ -82,7 +82,8 @@ internal sealed class WheelController
     private IReadOnlyList<Operation> Operations(WheelKind wheel, IReadOnlyList<FileItem> items)
     {
         var offered = new List<Operation>();
-        foreach (var op in wheel == WheelKind.Actions ? _actions : _coreOperations)
+        // Any operation can sit on any wheel (Settings → Wheels), so both lists are checked.
+        foreach (var op in AllOperations)
         {
             if (op.Wheel != wheel || !op.AppliesTo(items))
                 continue;
@@ -91,7 +92,7 @@ internal sealed class WheelController
             else if (MissingDownloads(op, items) is { } missing)
                 offered.Add(new NeedsToolOperation(op, missing));
         }
-        return WheelLayout.Arrange(offered, _settings.HiddenOperations, _settings.FavoriteOperations);
+        return WheelLayout.Arrange(offered, _settings.HiddenOperations, _settings.OperationOrder);
     }
 
     /// <summary>The smallest set of downloadable tools that would make <paramref name="op"/> work, or null.</summary>

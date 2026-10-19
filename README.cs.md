@@ -34,7 +34,7 @@ Kolo zůstane otevřené, dokud soubor nepustíte. Klávesu tedy můžete pustit
 
 **Zopakovat poslední akci:** během tažení ťukněte na stejnou klávesu znovu (nebo na otevřeném kole stiskněte **R**). Kolo se změní na jednu výseč, která zopakuje to, co jste dělali naposledy, se stejným nastavením (třeba stejné časy oříznutí).
 
-**Vlastní kolo:** v **Nastavení → Upravit kolo** označíte oblíbené výseče hvězdičkou (budou vždy první a na stejném místě) a nepoužívané skryjete.
+**Vlastní kolo:** v **Nastavení → Kola** si každé kolo poskládáte přetahováním: výseče dáte tam, kde je ruka čeká, nepoužívané přetáhnete mimo kolo, z knihovny je vrátíte, a přetažením na záložku jiného kola výseč přesunete (třeba Komprimovat na kolo Převést).
 
 **Předvolby:** v **Nastavení → Předvolby** si poskládáte vlastní výseče, třeba „JPG 80 %, max 1920 px, bez metadat“ nebo „MP4 720p, malý soubor“. Objeví se na kole vedle vestavěných.
 

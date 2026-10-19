@@ -11,8 +11,8 @@ using static FileAction.Core.Loc;
 namespace FileAction.App.UI;
 
 /// <summary>
-/// The Wheels page: pick a wheel and a file type, see that wheel as it will open, star favourites
-/// (they always come first, so your hand learns where to drop) and hide slices you never use.
+/// The Wheels page: pick a wheel and a file type, see that wheel as it will open and arrange it by
+/// dragging: reorder slices, hide them, bring them back from the library or move them to another wheel.
 /// </summary>
 internal sealed partial class SettingsWindow
 {
@@ -64,28 +64,43 @@ internal sealed partial class SettingsWindow
         Page = SettingsPage.Wheels;
     }
 
+    // ------------------------------------------------------------------ the page
+
+    private readonly Border _wheelHost = new() { MaxWidth = 440 };
+    private readonly List<(Border Tab, WheelKind Wheel)> _wheelTabs = [];
+    private Canvas? _wheelCanvas;
+    private List<Operation> _visibleOps = [];
+    private List<Operation> _groupOps = [];
+    private string _groupName = "";
+    private SliceDrag? _drag;
+
+    /// <summary>A slice being dragged: from the wheel or from the library, and where it would land now.</summary>
+    private sealed class SliceDrag(Operation op, bool fromWheel, Point start)
+    {
+        public Operation Op { get; } = op;
+        public bool FromWheel { get; } = fromWheel;
+        public Point Start { get; } = start;
+        public bool Active { get; set; }
+        public Border? Ghost { get; set; }
+        public List<Operation>? Preview { get; set; }
+        public WheelKind? TargetWheel { get; set; }
+        public bool Remove { get; set; }
+        public string Key { get; set; } = "";
+    }
+
     private void WheelsPage(Panel root)
     {
         PageHeader(root, PageName(SettingsPage.Wheels),
-            T("Hvězdičkou označte oblíbené výseče, budou vždy první a na stejném místě. Přepínačem výseč skryjete.",
-              "Star your favourite slices: they always come first, in the same place. Use the switch to hide a slice."));
+            T("Přetáhněte výseč na jiné místo na kole. Mimo kolo ji skryjete, na záložku jiného kola ji přesunete. Z knihovny vpravo ji vrátíte zpátky.",
+              "Drag a slice to another place on the wheel. Drop it off the wheel to hide it, or on another wheel's tab to move it there. Drag it back from the library on the right."));
 
         var top = new DockPanel { Margin = new Thickness(0, 14, 0, 18), LastChildFill = false };
-        var wheels = Segmented(
-            [.. new[] { WheelKind.Convert, WheelKind.Tools, WheelKind.Actions }.Select(w =>
-                (_settings.KeyFor(w) == Input.ModifierKey.None ? AppSettings.WheelName(w) : $"{AppSettings.WheelName(w)} · {AppSettings.KeyName(_settings.KeyFor(w))}", w))],
-            _wheel,
-            w =>
-            {
-                _wheel = w;
-                _group = 0;
-                Rebuild();
-            });
-        top.Children.Add(wheels);
+        top.Children.Add(WheelTabs());
         var reset = Button(T("Obnovit výchozí", "Reset to default"), () =>
         {
             _settings.HiddenOperations.Clear();
-            _settings.FavoriteOperations.Clear();
+            _settings.OperationOrder.Clear();
+            _settings.WheelOverrides.Clear();
             Save();
             Rebuild();
         }, glyph: "");
@@ -100,8 +115,8 @@ internal sealed partial class SettingsWindow
         if (groups.Count == 0)
             return;
         _group = Math.Clamp(_group, 0, groups.Count - 1);
-        var (name, _, ops) = groups[_group];
-        var visible = WheelLayout.Arrange(ops, _settings.HiddenOperations, _settings.FavoriteOperations);
+        (_groupName, _, _groupOps) = groups[_group];
+        _visibleOps = [.. WheelLayout.Arrange(_groupOps, _settings.HiddenOperations, _settings.OperationOrder)];
 
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(210) });
@@ -116,16 +131,18 @@ internal sealed partial class SettingsWindow
         for (var i = 0; i < groups.Count; i++)
         {
             var g = groups[i];
-            var shown = WheelLayout.Arrange(g.Ops, _settings.HiddenOperations, _settings.FavoriteOperations).Count;
+            var shown = WheelLayout.Arrange(g.Ops, _settings.HiddenOperations, _settings.OperationOrder).Count;
             list.Children.Add(GroupItem(g.Name, g.Glyph, $"{shown}", i));
         }
         grid.Children.Add(list);
 
-        // 2. the wheel as it will open
+        // 2. the wheel, which is also the drop target
         var middle = new StackPanel();
-        middle.Children.Add(ColumnLabel(T("2. Takhle se kolo otevře", "2. How the wheel opens")));
-        var preview = WheelWindow.Preview(visible, name, $"{visible.Count} / {ops.Count}", _settings.FavoriteOperations.ToHashSet());
-        preview.MaxWidth = 420;
+        middle.Children.Add(ColumnLabel(T("2. Kolo – přetahujte výseče", "2. The wheel – drag the slices")));
+        (_wheelHost.Parent as Panel)?.Children.Remove(_wheelHost);
+        if (_wheelHost.Parent is Border previous)
+            previous.Child = null;
+        RenderWheel(_visibleOps, null);
         middle.Children.Add(new Border
         {
             Background = Theme.Card,
@@ -133,21 +150,29 @@ internal sealed partial class SettingsWindow
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(14),
             Padding = new Thickness(10),
-            Child = preview,
+            Child = _wheelHost,
         });
-        var hint = Text(T("Oblíbené výseče jsou zvýrazněné. Stejná klávesa znovu (nebo R) zopakuje poslední akci.",
-                          "Favourite slices are highlighted. Tap the same key again (or press R) to repeat the last action."), 12, brush: Theme.Muted);
+        var hint = Text(T("Kolo se otevře přesně takhle. Pořadí platí pro všechny typy souborů: co dáte na první místo tady, bude první všude, kde se nabízí.",
+                          "The wheel opens exactly like this. The order applies to every file type: what you put first here comes first wherever it is offered."), 12, brush: Theme.Muted);
         hint.Margin = new Thickness(4, 10, 4, 0);
         middle.Children.Add(hint);
+        if (_visibleOps.Count > 12)
+        {
+            var crowded = Text(T($"Na kole je {_visibleOps.Count} výsečí, popisky jsou malé. Méně používané zkuste skrýt.",
+                                 $"The wheel has {_visibleOps.Count} slices and the labels get small. Try hiding the ones you rarely use."), 12, brush: Theme.Accent);
+            crowded.Margin = new Thickness(4, 8, 4, 0);
+            middle.Children.Add(crowded);
+        }
         Grid.SetColumn(middle, 2);
         grid.Children.Add(middle);
 
-        // 3. slices
+        // 3. library
         var right = new StackPanel();
-        right.Children.Add(ColumnLabel(T("3. Výseče", "3. Slices")));
+        right.Children.Add(ColumnLabel(T("3. Knihovna – táhněte na kolo", "3. Library – drag onto the wheel")));
         var rows = new StackPanel();
-        foreach (var op in WheelLayout.Arrange(ops, [], _settings.FavoriteOperations))
-            rows.Children.Add(SliceRow(op, rows.Children.Count > 0));
+        var shownIds = _visibleOps.Select(o => o.Id).ToHashSet();
+        foreach (var op in _visibleOps.Concat(_groupOps.Where(o => !shownIds.Contains(o.Id))))
+            rows.Children.Add(LibraryRow(op, rows.Children.Count > 0));
         right.Children.Add(new Border
         {
             Background = Theme.Card,
@@ -161,6 +186,357 @@ internal sealed partial class SettingsWindow
         grid.Children.Add(right);
 
         root.Children.Add(grid);
+    }
+
+    /// <summary>The wheel switcher; its tabs are also drop targets for moving a slice to another wheel.</summary>
+    private Border WheelTabs()
+    {
+        _wheelTabs.Clear();
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        foreach (var w in new[] { WheelKind.Convert, WheelKind.Tools, WheelKind.Actions })
+        {
+            var on = w == _wheel;
+            var key = _settings.KeyFor(w);
+            var text = new TextBlock
+            {
+                Text = key == Input.ModifierKey.None ? AppSettings.WheelName(w) : $"{AppSettings.WheelName(w)} · {AppSettings.KeyName(key)}",
+                FontSize = 12.5,
+                FontWeight = on ? FontWeights.SemiBold : FontWeights.Normal,
+                Foreground = on ? Theme.TextOnAccent : Theme.Text,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            var tab = new Border
+            {
+                CornerRadius = new CornerRadius(7),
+                Padding = new Thickness(12, 5, 12, 6),
+                Background = on ? Theme.AccentGradient : Brushes.Transparent,
+                BorderThickness = new Thickness(1.5),
+                BorderBrush = Brushes.Transparent,
+                Cursor = Cursors.Hand,
+                Child = text,
+            };
+            var target = w;
+            tab.MouseLeftButtonUp += (_, _) =>
+            {
+                if (_drag is { Active: true })
+                    return;
+                _wheel = target;
+                _group = 0;
+                Rebuild();
+            };
+            _wheelTabs.Add((tab, w));
+            panel.Children.Add(tab);
+        }
+        return new Border { Background = Theme.Track, CornerRadius = new CornerRadius(9), Padding = new Thickness(2), Child = panel };
+    }
+
+    private void RenderWheel(IReadOnlyList<Operation> ops, string? dragged)
+    {
+        var preview = WheelWindow.Preview(ops, _groupName, $"{ops.Count} / {_groupOps.Count}", dragged is null ? null : new HashSet<string> { dragged });
+        _wheelCanvas = (Canvas)((Viewbox)preview).Child;
+        preview.Cursor = Cursors.Hand;
+        preview.MouseLeftButtonDown += (_, e) =>
+        {
+            var index = WheelWindow.PreviewSliceAt(e.GetPosition(_wheelCanvas), _visibleOps.Count, out var offWheel);
+            if (index < 0 || offWheel)
+                return;
+            BeginDrag(_visibleOps[index], fromWheel: true, e);
+        };
+        _wheelHost.Child = preview;
+    }
+
+    private UIElement LibraryRow(Operation op, bool separator)
+    {
+        var hidden = _settings.HiddenOperations.Contains(op.Id);
+        var toggle = Toggle(!hidden, visible =>
+        {
+            if (visible)
+                _settings.HiddenOperations.Remove(op.Id);
+            else if (!_settings.HiddenOperations.Contains(op.Id))
+                _settings.HiddenOperations.Add(op.Id);
+            Save();
+            // Let the switch finish its animation before the wheel redraws.
+            Dispatcher.BeginInvoke(Rebuild, System.Windows.Threading.DispatcherPriority.Background);
+        });
+        toggle.Margin = new Thickness(6, 0, 8, 0);
+        toggle.VerticalAlignment = VerticalAlignment.Center;
+
+        var grip = new TextBlock
+        {
+            Text = "",
+            FontFamily = Theme.Icons,
+            FontSize = 14,
+            Foreground = Theme.Muted,
+            Width = 22,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var isFormat = op.Wheel == WheelKind.Convert && op.Label.Length <= 6 && op.Label.ToUpperInvariant() == op.Label;
+        var icon = new TextBlock
+        {
+            Text = isFormat ? "" : op.Glyph,
+            FontFamily = Theme.Icons,
+            FontSize = 16,
+            Foreground = Theme.Text,
+            Width = 28,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var label = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        label.Children.Add(Text(op.Label, 14, isFormat ? FontWeights.SemiBold : FontWeights.Normal, wrap: false));
+        var detail = op.Subtitle ?? "";
+        if (op is RelocatedOperation moved)
+            detail = (detail.Length > 0 ? detail + " · " : "") + T($"přesunuto z kola {AppSettings.WheelName(moved.HomeWheel)}", $"moved from {AppSettings.WheelName(moved.HomeWheel)}");
+        if (detail.Length > 0)
+            label.Children.Add(Text(detail, 11.5, brush: Theme.Muted, wrap: false));
+
+        var row = new DockPanel { Margin = new Thickness(6, 5, 2, 5), Opacity = hidden ? 0.5 : 1 };
+        DockPanel.SetDock(grip, Dock.Left);
+        DockPanel.SetDock(icon, Dock.Left);
+        DockPanel.SetDock(toggle, Dock.Right);
+        row.Children.Add(grip);
+        row.Children.Add(icon);
+        row.Children.Add(toggle);
+        if (op is RelocatedOperation r)
+        {
+            var back = new TextBlock
+            {
+                Text = "",
+                FontFamily = Theme.Icons,
+                FontSize = 14,
+                Foreground = Theme.Muted,
+                Padding = new Thickness(8),
+                Cursor = Cursors.Hand,
+                VerticalAlignment = VerticalAlignment.Center,
+                ToolTip = T($"Vrátit na kolo {AppSettings.WheelName(r.HomeWheel)}", $"Back to {AppSettings.WheelName(r.HomeWheel)}"),
+            };
+            back.MouseLeftButtonDown += (_, e) => e.Handled = true;
+            back.MouseLeftButtonUp += (_, e) =>
+            {
+                e.Handled = true;
+                _settings.WheelOverrides.Remove(op.Id);
+                Save();
+                Rebuild();
+            };
+            DockPanel.SetDock(back, Dock.Right);
+            row.Children.Add(back);
+        }
+        row.Children.Add(label);
+        var item = new Border
+        {
+            BorderBrush = Theme.PanelBorder,
+            BorderThickness = new Thickness(0, separator ? 1 : 0, 0, 0),
+            Background = Brushes.Transparent,
+            Cursor = Cursors.SizeAll,
+            Child = row,
+        };
+        // The switch handles its own clicks; anywhere else on the row starts a drag.
+        item.MouseLeftButtonDown += (_, e) =>
+        {
+            if (e.OriginalSource is DependencyObject source && IsInside(source, toggle))
+                return;
+            BeginDrag(op, fromWheel: false, e);
+        };
+        return item;
+    }
+
+    private static bool IsInside(DependencyObject element, DependencyObject container)
+    {
+        for (var current = element; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (ReferenceEquals(current, container))
+                return true;
+        }
+        return false;
+    }
+
+    // ------------------------------------------------------------------ dragging
+
+    private void BeginDrag(Operation op, bool fromWheel, MouseButtonEventArgs e)
+    {
+        _drag = new SliceDrag(op, fromWheel, e.GetPosition(this));
+        CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnDragMove(object sender, MouseEventArgs e)
+    {
+        if (_drag is null)
+            return;
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            EndDrag(commit: false);
+            return;
+        }
+        DragTo(e.GetPosition(this));
+    }
+
+    /// <summary>Follows the cursor at <paramref name="position"/> (window coordinates).</summary>
+    private void DragTo(Point position)
+    {
+        if (_drag is not { } drag)
+            return;
+        Point At(Visual element) => TranslatePoint(position, (UIElement)element);
+        if (!drag.Active)
+        {
+            if ((position - drag.Start).Length < 5)
+                return;
+            drag.Active = true;
+            drag.Ghost = Ghost(drag.Op);
+            _overlay.Children.Add(drag.Ghost);
+        }
+        Canvas.SetLeft(drag.Ghost!, At(_overlay).X + 14);
+        Canvas.SetTop(drag.Ghost!, At(_overlay).Y + 10);
+
+        // Over another wheel's tab: move the slice to that wheel.
+        drag.TargetWheel = null;
+        foreach (var (tab, wheel) in _wheelTabs)
+        {
+            var p = At(tab);
+            var over = wheel != _wheel && p.X >= 0 && p.Y >= 0 && p.X <= tab.ActualWidth && p.Y <= tab.ActualHeight;
+            tab.BorderBrush = over ? Theme.Accent : Brushes.Transparent;
+            if (over)
+                drag.TargetWheel = wheel;
+        }
+
+        var others = _visibleOps.Where(o => o.Id != drag.Op.Id).ToList();
+        string key;
+        if (drag.TargetWheel is { } target)
+        {
+            drag.Preview = null;
+            drag.Remove = false;
+            key = "wheel:" + target;
+            SetGhostHint(drag, T($"Přesunout na kolo {AppSettings.WheelName(target)}", $"Move to {AppSettings.WheelName(target)}"));
+        }
+        else
+        {
+            var index = -2;
+            if (_wheelCanvas is not null)
+            {
+                var slice = WheelWindow.PreviewSliceAt(At(_wheelCanvas), others.Count + 1, out var off);
+                index = off ? -2 : slice;
+            }
+            if (index == -2)
+            {
+                // Off the wheel: a slice from the wheel gets hidden, one from the library goes nowhere.
+                drag.Remove = drag.FromWheel;
+                drag.Preview = drag.FromWheel ? others : null;
+                key = drag.FromWheel ? "remove" : "none";
+                SetGhostHint(drag, drag.FromWheel ? T("Pustit = skrýt", "Drop to hide") : "");
+            }
+            else if (index == -1)
+            {
+                // Over the hub: keep the last position.
+                return;
+            }
+            else
+            {
+                drag.Remove = false;
+                drag.Preview = WheelOrder.MoveTo(others.Select(o => o.Id).ToList(), drag.Op.Id, index)
+                    .Select(id => id == drag.Op.Id ? drag.Op : others.First(o => o.Id == id)).ToList();
+                key = "at:" + index;
+                SetGhostHint(drag, "");
+            }
+        }
+        if (key == drag.Key)
+            return;
+        drag.Key = key;
+        RenderWheel(drag.Preview ?? _visibleOps, drag.Preview is null ? null : drag.Op.Id);
+    }
+
+    private void OnDragUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_drag is not null)
+            EndDrag(commit: true);
+    }
+
+    private void EndDrag(bool commit)
+    {
+        var drag = _drag;
+        _drag = null;
+        ReleaseMouseCapture();
+        if (drag?.Ghost is { } ghost)
+            _overlay.Children.Remove(ghost);
+        if (drag is not { Active: true })
+            return;
+        var id = drag.Op.Id;
+        if (commit && drag.TargetWheel is { } wheel)
+        {
+            var home = drag.Op is RelocatedOperation r ? r.HomeWheel : drag.Op.Wheel;
+            if (wheel == home)
+                _settings.WheelOverrides.Remove(id);
+            else
+                _settings.WheelOverrides[id] = wheel;
+            _settings.HiddenOperations.Remove(id);
+            Save();
+        }
+        else if (commit && drag.Remove)
+        {
+            if (!_settings.HiddenOperations.Contains(id))
+                _settings.HiddenOperations.Add(id);
+            Save();
+        }
+        else if (commit && drag.Preview is { } arranged)
+        {
+            _settings.HiddenOperations.Remove(id);
+            _settings.OperationOrder = WheelOrder.Merge([.. arranged.Select(o => o.Id)], _settings.OperationOrder);
+            Save();
+        }
+        Rebuild();
+    }
+
+    // ------------------------------------------------------------------ for the self-test
+
+    /// <summary>The ids on the wheel as shown now.</summary>
+    internal IReadOnlyList<string> VisibleSliceIds => [.. _visibleOps.Select(o => o.Id)];
+
+    /// <summary>The ids in the library (shown first, then hidden).</summary>
+    internal Operation LibraryOperation(string id) => _groupOps.First(o => o.Id == id);
+
+    /// <summary>Window coordinates of the middle of slice <paramref name="index"/> on a wheel of <paramref name="count"/>.</summary>
+    internal Point SlicePoint(int index, int count) =>
+        _wheelCanvas!.TranslatePoint(WheelWindow.SliceCenter(index, count), this);
+
+    internal Point TabPoint(WheelKind wheel)
+    {
+        var tab = _wheelTabs.First(t => t.Wheel == wheel).Tab;
+        return tab.TranslatePoint(new Point(tab.ActualWidth / 2, tab.ActualHeight / 2), this);
+    }
+
+    /// <summary>Drags <paramref name="op"/> to <paramref name="to"/> and drops it, as the mouse would.</summary>
+    internal void SimulateDrag(Operation op, bool fromWheel, Point from, Point to)
+    {
+        _drag = new SliceDrag(op, fromWheel, from);
+        DragTo(new Point(from.X + 8, from.Y + 8));
+        // Between two real mouse moves WPF lays out the redrawn wheel; do the same here.
+        UpdateLayout();
+        DragTo(to);
+        UpdateLayout();
+        EndDrag(commit: true);
+    }
+
+    /// <summary>The label that follows the cursor while dragging.</summary>
+    private static Border Ghost(Operation op)
+    {
+        var panel = new StackPanel();
+        panel.Children.Add(Text(op.Label, 13.5, FontWeights.SemiBold, Theme.TextOnAccent, wrap: false));
+        panel.Children.Add(new TextBlock { FontSize = 11.5, Foreground = Theme.TextOnAccent, Opacity = 0.85, Tag = "hint" });
+        return new Border
+        {
+            Background = Theme.AccentGradient,
+            CornerRadius = new CornerRadius(9),
+            Padding = new Thickness(12, 6, 12, 7),
+            Effect = Theme.Shadow(14),
+            IsHitTestVisible = false,
+            Child = panel,
+        };
+    }
+
+    private static void SetGhostHint(SliceDrag drag, string text)
+    {
+        if (drag.Ghost?.Child is StackPanel panel && panel.Children.OfType<TextBlock>().FirstOrDefault(t => Equals(t.Tag, "hint")) is { } hint)
+        {
+            hint.Text = text;
+            hint.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        }
     }
 
     private static TextBlock ColumnLabel(string text)
@@ -226,79 +602,4 @@ internal sealed partial class SettingsWindow
         return item;
     }
 
-    private UIElement SliceRow(Operation op, bool separator)
-    {
-        var hidden = _settings.HiddenOperations.Contains(op.Id);
-        var favorite = _settings.FavoriteOperations.Contains(op.Id);
-
-        var star = new TextBlock
-        {
-            Text = favorite ? "" : "",
-            FontFamily = Theme.Icons,
-            FontSize = 16,
-            Foreground = favorite ? Theme.Accent : Theme.Muted,
-            Padding = new Thickness(8),
-            Cursor = Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = T("Oblíbená – vždy první", "Favourite – always first"),
-        };
-        star.MouseLeftButtonUp += (_, _) =>
-        {
-            if (!_settings.FavoriteOperations.Remove(op.Id))
-            {
-                _settings.FavoriteOperations.Add(op.Id);
-                _settings.HiddenOperations.Remove(op.Id);
-            }
-            Save();
-            Rebuild();
-        };
-
-        var toggle = Toggle(!hidden, visible =>
-        {
-            if (visible)
-            {
-                _settings.HiddenOperations.Remove(op.Id);
-            }
-            else if (!_settings.HiddenOperations.Contains(op.Id))
-            {
-                _settings.HiddenOperations.Add(op.Id);
-                _settings.FavoriteOperations.Remove(op.Id);
-            }
-            Save();
-            // Let the switch finish its animation before the wheel redraws.
-            Dispatcher.BeginInvoke(Rebuild, System.Windows.Threading.DispatcherPriority.Background);
-        });
-        toggle.Margin = new Thickness(6, 0, 8, 0);
-        toggle.VerticalAlignment = VerticalAlignment.Center;
-
-        var isFormat = op.Wheel == WheelKind.Convert && op.Label.Length <= 6 && op.Label.ToUpperInvariant() == op.Label;
-        var icon = new TextBlock
-        {
-            Text = isFormat ? "" : op.Glyph,
-            FontFamily = Theme.Icons,
-            FontSize = 16,
-            Foreground = Theme.Text,
-            Width = 28,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        var label = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        label.Children.Add(Text(op.Label, 14, isFormat ? FontWeights.SemiBold : FontWeights.Normal, wrap: false));
-        if (!string.IsNullOrEmpty(op.Subtitle))
-            label.Children.Add(Text(op.Subtitle, 11.5, brush: Theme.Muted, wrap: false));
-
-        var row = new DockPanel { Margin = new Thickness(10, 5, 2, 5), Opacity = hidden ? 0.5 : 1 };
-        DockPanel.SetDock(icon, Dock.Left);
-        DockPanel.SetDock(toggle, Dock.Right);
-        DockPanel.SetDock(star, Dock.Right);
-        row.Children.Add(icon);
-        row.Children.Add(toggle);
-        row.Children.Add(star);
-        row.Children.Add(label);
-        return new Border
-        {
-            BorderBrush = Theme.PanelBorder,
-            BorderThickness = new Thickness(0, separator ? 1 : 0, 0, 0),
-            Child = row,
-        };
-    }
 }

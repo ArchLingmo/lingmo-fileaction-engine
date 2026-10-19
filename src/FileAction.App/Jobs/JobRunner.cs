@@ -20,6 +20,8 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
     /// <param name="automatic">Started by a watched folder: not remembered for "repeat last" and never revealed.</param>
     public async void Start(Operation op, IReadOnlyList<FileItem> items, IReadOnlyDictionary<string, string>? parameters, bool automatic = false)
     {
+        // A slice moved to another wheel runs exactly like at home (app actions are recognised by type below).
+        op = RelocatedOperation.Unwrap(op);
         if (op is NeedsToolOperation needs)
         {
             if (await DownloadToolsAsync(needs.Missing, ask: true))

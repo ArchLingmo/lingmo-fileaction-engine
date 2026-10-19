@@ -42,6 +42,9 @@ internal sealed partial class SettingsWindow : Window
     private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     private SettingsPage _page = SettingsPage.General;
 
+    /// <summary>Above everything; holds what follows the cursor while a slice is dragged.</summary>
+    private readonly Canvas _overlay = new() { IsHitTestVisible = false };
+
     internal SettingsWindow(AppSettings settings, ToolLocator tools, Action changed)
     {
         _settings = settings;
@@ -58,6 +61,13 @@ internal sealed partial class SettingsWindow : Window
         Background = Theme.Page;
         FontFamily = Theme.UiFont;
         Build();
+        PreviewMouseMove += OnDragMove;
+        PreviewMouseLeftButtonUp += OnDragUp;
+        LostMouseCapture += (_, _) =>
+        {
+            if (_drag is { Active: true })
+                EndDrag(commit: false);
+        };
         Action refresh = () => Dispatcher.BeginInvoke(Rebuild);
         if (Updater is not null)
             Updater.Changed += refresh;
@@ -152,6 +162,9 @@ internal sealed partial class SettingsWindow : Window
         (_scroll.Parent as Grid)?.Children.Remove(_scroll);
         Grid.SetColumn(_scroll, 1);
         grid.Children.Add(_scroll);
+        (_overlay.Parent as Grid)?.Children.Remove(_overlay);
+        Grid.SetColumnSpan(_overlay, 2);
+        grid.Children.Add(_overlay);
         Content = grid;
     }
 

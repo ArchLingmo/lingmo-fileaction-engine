@@ -45,7 +45,16 @@ public sealed class AppSettings
     /// <summary>Operation ids the user removed from the wheels.</summary>
     public List<string> HiddenOperations { get; set; } = [];
 
-    /// <summary>Operation ids that always come first on their wheel, in this order.</summary>
+    /// <summary>
+    /// The user's slice order: these ids come first on every wheel they appear on, in this order; the rest
+    /// follow in the default order. Set by dragging slices in Settings → Wheels.
+    /// </summary>
+    public List<string> OperationOrder { get; set; } = [];
+
+    /// <summary>Operations the user moved to another wheel (id → wheel).</summary>
+    public Dictionary<string, WheelKind> WheelOverrides { get; set; } = [];
+
+    /// <summary>Starred slices from versions before 1.7; read once and turned into <see cref="OperationOrder"/>.</summary>
     public List<string> FavoriteOperations { get; set; } = [];
 
     /// <summary>The last operation run, for "repeat last" (with the values it asked for, e.g. trim times).</summary>
@@ -86,7 +95,7 @@ public sealed class AppSettings
         try
         {
             if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize(File.ReadAllText(FilePath), SettingsJson.Default.AppSettings) ?? new AppSettings();
+                return Migrate(JsonSerializer.Deserialize(File.ReadAllText(FilePath), SettingsJson.Default.AppSettings) ?? new AppSettings());
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
@@ -95,8 +104,24 @@ public sealed class AppSettings
         return new AppSettings();
     }
 
+    /// <summary>Stars became the start of the slice order in 1.7.</summary>
+    internal static AppSettings Migrate(AppSettings settings)
+    {
+        if (settings.FavoriteOperations.Count > 0)
+        {
+            settings.OperationOrder = WheelOrder.Merge(settings.FavoriteOperations, settings.OperationOrder);
+            settings.FavoriteOperations = [];
+        }
+        return settings;
+    }
+
+    /// <summary>The self-test changes settings through the UI; it must never overwrite the user's file.</summary>
+    internal static bool SavingDisabled { get; set; }
+
     public void Save()
     {
+        if (SavingDisabled)
+            return;
         try
         {
             Directory.CreateDirectory(Folder);

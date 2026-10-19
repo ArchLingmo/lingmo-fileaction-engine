@@ -34,7 +34,7 @@ The wheel stays open until you drop, so you can release the key and tap another 
 
 **Repeat the last action:** tap the same key again while dragging (or press **R** on an open wheel) and the wheel turns into a single slice that repeats what you did last, with the same settings (e.g. the same trim times).
 
-**Your own wheel:** in **Settings → Customize wheels** you can star favourite slices (they always come first, in the same place) and hide the ones you never use.
+**Your own wheel:** in **Settings → Wheels** arrange each wheel by dragging: put slices where your hand expects them, drop the ones you never use off the wheel, bring them back from the library, or drag a slice onto another wheel's tab to move it there (e.g. Compress onto the Convert wheel).
 
 **Presets:** in **Settings → Presets** put together slices of your own, like "JPG 80 %, max 1920 px, no metadata" or "MP4 720p, small file". They appear on the wheel next to the built-in ones.
 

@@ -99,3 +99,35 @@ public class WatchRuleTests
         Assert.False(WatchRules.IsInside(folder, sibling));
     }
 }
+
+public class WheelOrderTests
+{
+    [Fact]
+    public void Arranged_slices_come_first_and_keep_the_rest()
+    {
+        Assert.Equal(["b", "a", "x", "y"], WheelOrder.Merge(["b", "a"], ["x", "a", "y"]));
+    }
+
+    [Theory]
+    [InlineData("c", 0, "c,a,b")]
+    [InlineData("a", 2, "b,c,a")]
+    [InlineData("new", 1, "a,new,b,c")]
+    [InlineData("b", 99, "a,c,b")]
+    public void Move_to_inserts_at_the_index(string id, int index, string expected) =>
+        Assert.Equal(expected.Split(','), WheelOrder.MoveTo(["a", "b", "c"], id, index));
+
+    [Fact]
+    public void Relocated_operation_runs_like_the_original()
+    {
+        var compress = FileAction.Core.Operations.Catalog.Build().Single(o => o.Id == "image.compress");
+        var ops = RelocatedOperation.Apply([compress], new Dictionary<string, WheelKind> { ["image.compress"] = WheelKind.Convert });
+        var moved = Assert.IsType<RelocatedOperation>(Assert.Single(ops));
+        Assert.Equal(WheelKind.Convert, moved.Wheel);
+        Assert.Equal(WheelKind.Tools, moved.HomeWheel);
+        Assert.Equal(compress.Label, moved.Label);
+        Assert.True(moved.AppliesTo([new FileItem("a.jpg")]));
+        Assert.Same(compress, RelocatedOperation.Unwrap(moved));
+        // Moving to the home wheel changes nothing.
+        Assert.Same(compress, RelocatedOperation.Apply([compress], new Dictionary<string, WheelKind> { ["image.compress"] = WheelKind.Tools })[0]);
+    }
+}

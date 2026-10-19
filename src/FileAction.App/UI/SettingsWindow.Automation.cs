@@ -97,7 +97,8 @@ internal sealed partial class SettingsWindow
         if (MessageBox.Show(this, question, "FileAction", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
         _settings.Presets.Remove(preset);
-        _settings.FavoriteOperations.Remove(id);
+        _settings.OperationOrder.Remove(id);
+        _settings.WheelOverrides.Remove(id);
         _settings.HiddenOperations.Remove(id);
         foreach (var folder in used)
             folder.Enabled = false;
