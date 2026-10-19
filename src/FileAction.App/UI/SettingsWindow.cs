@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using FileAction.App.Input;
 using FileAction.App.Shell;
@@ -10,12 +11,23 @@ using static FileAction.Core.Loc;
 
 namespace FileAction.App.UI;
 
-/// <summary>Settings in the style of the Windows 11 Settings app: sections of rounded cards.</summary>
-internal sealed class SettingsWindow : Window
+/// <summary>The settings pages shown in the sidebar.</summary>
+internal enum SettingsPage
+{
+    General,
+    Gestures,
+    Wheels,
+    Quality,
+    Helpers,
+    About,
+}
+
+/// <summary>Settings with a sidebar of pages; each page is a column of rounded cards.</summary>
+internal sealed partial class SettingsWindow : Window
 {
     private static SettingsWindow? _open;
 
-    /// <summary>Set by the app: the update checker and the operations the wheel editor lists.</summary>
+    /// <summary>Set by the app: the update checker and the operations the wheel page lists.</summary>
     public static Shell.Updater? Updater { get; set; }
 
     public static Func<IReadOnlyList<Operation>>? Operations { get; set; }
@@ -26,6 +38,7 @@ internal sealed class SettingsWindow : Window
     private readonly ToolLocator _tools;
     private readonly Action _changed;
     private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private SettingsPage _page = SettingsPage.General;
 
     internal SettingsWindow(AppSettings settings, ToolLocator tools, Action changed)
     {
@@ -34,14 +47,14 @@ internal sealed class SettingsWindow : Window
         _changed = changed;
         Theme.Refresh();
         Title = T("FileAction – nastavení", "FileAction – settings");
-        Width = 680;
+        Width = 1180;
         Height = 820;
-        MinWidth = 520;
+        MinWidth = 760;
+        MinHeight = 520;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/FileAction.ico"));
         Background = Theme.Page;
         FontFamily = Theme.UiFont;
-        Content = _scroll;
         Build();
         Action refresh = () => Dispatcher.BeginInvoke(Rebuild);
         if (Updater is not null)
@@ -54,14 +67,11 @@ internal sealed class SettingsWindow : Window
         };
     }
 
-    public static void ShowSingle(AppSettings settings, ToolLocator tools, Action changed)
+    public static void ShowSingle(AppSettings settings, ToolLocator tools, Action changed, SettingsPage? page = null)
     {
-        if (_open is not null)
-        {
-            _open.Activate();
-            return;
-        }
-        _open = new SettingsWindow(settings, tools, changed);
+        _open ??= new SettingsWindow(settings, tools, changed);
+        if (page is { } p)
+            _open.Page = p;
         _open.Show();
         _open.Activate();
     }
@@ -69,13 +79,28 @@ internal sealed class SettingsWindow : Window
     /// <summary>Redraws the open settings window after the app changed a setting itself.</summary>
     public static void RefreshIfOpen() => _open?.Rebuild();
 
+    /// <summary>The page on screen; setting it switches pages.</summary>
+    public SettingsPage Page
+    {
+        get => _page;
+        set
+        {
+            _page = value;
+            Build();
+            _scroll.ScrollToTop();
+        }
+    }
+
+    /// <summary>Lets the self-test render a whole page instead of the visible part.</summary>
+    internal void ExpandForPreview() => _scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+
     private void Save()
     {
         _settings.Save();
         _changed();
     }
 
-    /// <summary>Rebuilds every card (used when one change affects others), keeping the scroll position.</summary>
+    /// <summary>Rebuilds the page (used when one change affects others), keeping the scroll position.</summary>
     private void Rebuild()
     {
         var offset = _scroll.VerticalOffset;
@@ -86,8 +111,152 @@ internal sealed class SettingsWindow : Window
 
     private void Build()
     {
-        var root = new StackPanel { Margin = new Thickness(32, 28, 32, 32), MaxWidth = 720 };
-        root.Children.Add(Header());
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(248) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        var sidebar = Sidebar();
+        grid.Children.Add(sidebar);
+
+        var page = new StackPanel { Margin = new Thickness(40, 34, 40, 40), MaxWidth = _page == SettingsPage.Wheels ? 1100 : 760, HorizontalAlignment = HorizontalAlignment.Left };
+        switch (_page)
+        {
+            case SettingsPage.General:
+                GeneralPage(page);
+                break;
+            case SettingsPage.Gestures:
+                GesturesPage(page);
+                break;
+            case SettingsPage.Wheels:
+                WheelsPage(page);
+                break;
+            case SettingsPage.Quality:
+                QualityPage(page);
+                break;
+            case SettingsPage.Helpers:
+                HelpersPage(page);
+                break;
+            default:
+                AboutPage(page);
+                break;
+        }
+        _scroll.Content = page;
+        // The scroll viewer outlives each rebuild (it keeps the position); free it from the old layout.
+        (_scroll.Parent as Grid)?.Children.Remove(_scroll);
+        Grid.SetColumn(_scroll, 1);
+        grid.Children.Add(_scroll);
+        Content = grid;
+    }
+
+    private static string PageName(SettingsPage page) => page switch
+    {
+        SettingsPage.General => T("Obecné", "General"),
+        SettingsPage.Gestures => T("Gesta a zkratky", "Gestures & keys"),
+        SettingsPage.Wheels => T("Kola", "Wheels"),
+        SettingsPage.Quality => T("Kvalita", "Quality"),
+        SettingsPage.Helpers => T("Pomocné programy", "Helper programs"),
+        _ => T("O aplikaci", "About"),
+    };
+
+    private static string PageGlyph(SettingsPage page) => page switch
+    {
+        SettingsPage.General => "",
+        SettingsPage.Gestures => "",
+        SettingsPage.Wheels => "",
+        SettingsPage.Quality => "",
+        SettingsPage.Helpers => "",
+        _ => "",
+    };
+
+    // ------------------------------------------------------------------ sidebar
+
+    private Border Sidebar()
+    {
+        var dock = new DockPanel { Margin = new Thickness(18, 24, 18, 20) };
+
+        var brand = new DockPanel { Margin = new Thickness(8, 0, 0, 26) };
+        var logo = new Image
+        {
+            Source = new BitmapImage(new Uri("pack://application:,,,/Assets/FileAction.png")),
+            Width = 40,
+            Height = 40,
+            Margin = new Thickness(0, 0, 12, 0),
+        };
+        brand.Children.Add(logo);
+        var names = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        var name = Text("FileAction", 19, FontWeights.SemiBold);
+        name.FontFamily = Theme.DisplayFont;
+        names.Children.Add(name);
+        names.Children.Add(Text(T("Chyť, ťukni, pusť.", "Grab, tap, drop."), 12, brush: Theme.Muted));
+        brand.Children.Add(names);
+        DockPanel.SetDock(brand, Dock.Top);
+        dock.Children.Add(brand);
+
+        var version = Text(T("Verze ", "Version ") + Shell.Updater.Current, 12, brush: Theme.Muted);
+        version.Margin = new Thickness(10, 12, 0, 0);
+        DockPanel.SetDock(version, Dock.Bottom);
+        dock.Children.Add(version);
+
+        var nav = new StackPanel();
+        foreach (var page in Enum.GetValues<SettingsPage>())
+            nav.Children.Add(NavItem(page));
+        dock.Children.Add(nav);
+
+        return new Border
+        {
+            Background = Theme.Card,
+            BorderBrush = Theme.PanelBorder,
+            BorderThickness = new Thickness(0, 0, 1, 0),
+            Child = dock,
+        };
+    }
+
+    private Border NavItem(SettingsPage page)
+    {
+        var active = page == _page;
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(new TextBlock
+        {
+            Text = PageGlyph(page),
+            FontFamily = Theme.Icons,
+            FontSize = 16,
+            Foreground = active ? Theme.Accent : Theme.Text,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 14, 0),
+        });
+        row.Children.Add(Text(PageName(page), 14, active ? FontWeights.SemiBold : FontWeights.Normal, wrap: false));
+        var item = new Border
+        {
+            Background = active ? Theme.AccentSoft : System.Windows.Media.Brushes.Transparent,
+            CornerRadius = new CornerRadius(9),
+            Padding = new Thickness(14, 10, 14, 10),
+            Margin = new Thickness(0, 0, 0, 3),
+            Cursor = Cursors.Hand,
+            Child = row,
+        };
+        if (!active)
+        {
+            item.MouseEnter += (_, _) => item.Background = Theme.Hover;
+            item.MouseLeave += (_, _) => item.Background = System.Windows.Media.Brushes.Transparent;
+        }
+        item.MouseLeftButtonUp += (_, _) => Page = page;
+        return item;
+    }
+
+    private static void PageHeader(Panel page, string title, string subtitle)
+    {
+        var t = Text(title, 28, FontWeights.SemiBold);
+        t.FontFamily = Theme.DisplayFont;
+        page.Children.Add(t);
+        var s = Text(subtitle, 13.5, brush: Theme.Muted);
+        s.Margin = new Thickness(0, 4, 0, 6);
+        page.Children.Add(s);
+    }
+
+    // ------------------------------------------------------------------ pages
+
+    private void GeneralPage(Panel root)
+    {
+        PageHeader(root, PageName(SettingsPage.General), T("Jazyk, kam se ukládají výsledky a spouštění s Windows.", "Language, where results go and starting with Windows."));
 
         root.Children.Add(SectionHeader(T("Jazyk", "Language")));
         root.Children.Add(Card(T("Jazyk aplikace", "App language"), null,
@@ -102,52 +271,7 @@ internal sealed class SettingsWindow : Window
                     Title = T("FileAction – nastavení", "FileAction – settings");
                     Rebuild();
                 }),
-            glyph: "\uE774"));
-
-        root.Children.Add(SectionHeader(T("Gesto", "Gesture")));
-        root.Children.Add(Card(
-            T("Chyťte soubor a během tažení ťukněte na klávesu", "Grab a file and tap a key while dragging"),
-            T("Otevře se kolo; soubor pusťte na výseč. Do středu = zrušit.", "A wheel opens; drop the file on a slice. Drop in the middle to cancel."),
-            null, glyph: Glyphs.Extract));
-        foreach (var (wheel, description) in new[]
-                 {
-                     (WheelKind.Convert, T("Převod na jiný formát", "Convert to another format")),
-                     (WheelKind.Tools, T("Komprimovat, zmenšit, oříznout, spojit…", "Compress, shrink, trim, merge…")),
-                     (WheelKind.Actions, T("Kopírovat, přesunout, cesta, terminál, sdílet…", "Copy, move, path, terminal, share…")),
-                 })
-        {
-            root.Children.Add(Card(AppSettings.WheelName(wheel), description, KeyChooser(wheel)));
-        }
-        root.Children.Add(Card(T("Upravit kolo", "Customize wheels"),
-            T("Oblíbené výseče jako první, nepoužívané skrýt. Ťuknutí na stejnou klávesu znovu (nebo R) zopakuje poslední akci.",
-              "Favourite slices first, hide the ones you never use. Tap the same key again (or press R) to repeat the last action."),
-            Button(T("Upravit…", "Customize…"), () =>
-            {
-                if (Operations is not null)
-                    WheelEditorWindow.ShowSingle(_settings, Operations(), _changed);
-            }, glyph: "\uE70F"),
-            glyph: "\uE8EE"));
-        root.Children.Add(Card(T("Pozastavit gesta", "Pause gestures"), T("Kolo se při tažení neotevře.", "The wheel won’t open while dragging."),
-            Toggle(_settings.Paused, v =>
-            {
-                _settings.Paused = v;
-                Save();
-            })));
-
-        root.Children.Add(SectionHeader(T("Klávesnice", "Keyboard")));
-        root.Children.Add(Card(T("Zkratka pro výběr v Průzkumníku", "Shortcut for the File Explorer selection"),
-            T("Šipky vyberou výseč, Enter potvrdí, Tab přepne kolo, Esc zavře.", "Arrows pick a slice, Enter runs it, Tab switches wheels, Esc closes."),
-            null,
-            below: Wrap(Segmented(
-                Enum.GetValues<HotkeyPreset>().Where(p => p != HotkeyPreset.None).Append(HotkeyPreset.None)
-                    .Select(p => (AppSettings.HotkeyName(p), p)).ToList(),
-                _settings.Hotkey,
-                value =>
-                {
-                    _settings.Hotkey = value;
-                    Save();
-                })),
-            glyph: "\uE765"));
+            glyph: ""));
 
         root.Children.Add(SectionHeader(T("Výsledky", "Results")));
         var folderLine = Text(_settings.OutputDirectory ?? "", 12, brush: Theme.Muted, wrap: false);
@@ -182,21 +306,112 @@ internal sealed class SettingsWindow : Window
             {
                 _settings.RevealResult = v;
                 Save();
-            })));
+            }), glyph: ""));
 
-        root.Children.Add(SectionHeader(T("Kvalita", "Quality")));
+        root.Children.Add(SectionHeader(T("Systém", "System")));
+        root.Children.Add(Card(T("Spouštět po přihlášení", "Start when I sign in"), null,
+            Toggle(ShellIntegration.IsAutostartEnabled, v => Apply(() => ShellIntegration.SetAutostart(v))), glyph: ""));
+        root.Children.Add(Card(T("Kontextová nabídka Průzkumníka", "File Explorer context menu"), T("Položka „FileAction…“ po kliknutí pravým tlačítkem", "A “FileAction…” item on right-click"),
+            Toggle(ShellIntegration.IsContextMenuEnabled, v => Apply(() => ShellIntegration.SetContextMenu(v))), glyph: ""));
+    }
+
+    private void GesturesPage(Panel root)
+    {
+        PageHeader(root, PageName(SettingsPage.Gestures), T("Která klávesa otevře které kolo a zkratka bez myši.", "Which key opens which wheel, and a shortcut without the mouse."));
+
+        root.Children.Add(SectionHeader(T("Gesto", "Gesture")));
+        root.Children.Add(Card(
+            T("Chyťte soubor a během tažení ťukněte na klávesu", "Grab a file and tap a key while dragging"),
+            T("Otevře se kolo; soubor pusťte na výseč. Do středu = zrušit. Stejná klávesa znovu (nebo R) zopakuje poslední akci.",
+              "A wheel opens; drop the file on a slice. Drop in the middle to cancel. The same key again (or R) repeats the last action."),
+            null, glyph: Glyphs.Extract));
+        foreach (var (wheel, description) in new[]
+                 {
+                     (WheelKind.Convert, T("Převod na jiný formát", "Convert to another format")),
+                     (WheelKind.Tools, T("Komprimovat, zmenšit, oříznout, spojit…", "Compress, shrink, trim, merge…")),
+                     (WheelKind.Actions, T("Kopírovat, přesunout, cesta, terminál, sdílet…", "Copy, move, path, terminal, share…")),
+                 })
+        {
+            root.Children.Add(Card(AppSettings.WheelName(wheel), description, KeyChooser(wheel), glyph: WheelGlyph(wheel)));
+        }
+        root.Children.Add(Card(T("Pozastavit gesta", "Pause gestures"), T("Kolo se při tažení neotevře.", "The wheel won’t open while dragging."),
+            Toggle(_settings.Paused, v =>
+            {
+                _settings.Paused = v;
+                Save();
+            }), glyph: ""));
+
+        root.Children.Add(SectionHeader(T("Klávesnice", "Keyboard")));
+        root.Children.Add(Card(T("Zkratka pro výběr v Průzkumníku", "Shortcut for the File Explorer selection"),
+            T("Šipky vyberou výseč, Enter potvrdí, Tab přepne kolo, Esc zavře.", "Arrows pick a slice, Enter runs it, Tab switches wheels, Esc closes."),
+            null,
+            below: Wrap(Segmented(
+                Enum.GetValues<HotkeyPreset>().Where(p => p != HotkeyPreset.None).Append(HotkeyPreset.None)
+                    .Select(p => (AppSettings.HotkeyName(p), p)).ToList(),
+                _settings.Hotkey,
+                value =>
+                {
+                    _settings.Hotkey = value;
+                    Save();
+                })),
+            glyph: ""));
+    }
+
+    private static string WheelGlyph(WheelKind wheel) => wheel switch
+    {
+        WheelKind.Convert => "",
+        WheelKind.Tools => "",
+        _ => "",
+    };
+
+    private void QualityPage(Panel root)
+    {
+        PageHeader(root, PageName(SettingsPage.Quality), T("Poměr kvality a velikosti výsledných souborů.", "The balance between quality and file size."));
+        root.Children.Add(SectionHeader(T("Obrázky", "Images")));
         root.Children.Add(Card(T("JPG, WebP a AVIF", "JPG, WebP and AVIF"), T("Kvalita při převodu obrázků", "Quality when converting images"),
             Slider(50, 100, _settings.Quality.JpegQuality, v => _settings.Quality.JpegQuality = v, Save), glyph: Glyphs.Photo));
         root.Children.Add(Card(T("Komprimovat", "Compress"), T("Kvalita nástroje Komprimovat", "Quality of the Compress tool"),
             Slider(30, 95, _settings.Quality.CompressQuality, v => _settings.Quality.CompressQuality = v, Save), glyph: Glyphs.Shrink));
+        root.Children.Add(SectionHeader("PDF"));
         root.Children.Add(Card(T("PDF na obrázky", "PDF to images"), T("Rozlišení v DPI", "Resolution in DPI"),
             Slider(72, 600, _settings.Quality.PdfDpi, v => _settings.Quality.PdfDpi = v, Save), glyph: Glyphs.Page));
+    }
 
-        root.Children.Add(SectionHeader(T("Systém", "System")));
-        root.Children.Add(Card(T("Spouštět po přihlášení", "Start when I sign in"), null,
-            Toggle(ShellIntegration.IsAutostartEnabled, v => Apply(() => ShellIntegration.SetAutostart(v))), glyph: "\uE7E8"));
-        root.Children.Add(Card(T("Kontextová nabídka Průzkumníka", "File Explorer context menu"), T("Položka „FileAction…“ po kliknutí pravým tlačítkem", "A “FileAction…” item on right-click"),
-            Toggle(ShellIntegration.IsContextMenuEnabled, v => Apply(() => ShellIntegration.SetContextMenu(v))), glyph: "\uE8A7"));
+    private void HelpersPage(Panel root)
+    {
+        PageHeader(root, PageName(SettingsPage.Helpers), T("Programy, které FileAction používá pro audio, video a dokumenty.", "Programs FileAction uses for audio, video and documents."));
+        root.Children.Add(SectionHeader(T("Vestavěné", "Built in")));
+        root.Children.Add(Card(T("Co zvládá FileAction sám", "Built in"),
+            T("Obrázky, PDF, tabulky, titulky a archivy. Audio a video potřebují FFmpeg, dokumenty Pandoc a soubory Office LibreOffice.",
+              "Images, PDFs, spreadsheets, subtitles and archives. Audio and video need FFmpeg, documents need Pandoc and Office files need LibreOffice."),
+            Button(T("Zkontrolovat znovu", "Check again"), () =>
+            {
+                _tools.Refresh();
+                Rebuild();
+            }, glyph: ""),
+            glyph: ""));
+        root.Children.Add(SectionHeader(T("Pomocné programy", "Helper programs")));
+        foreach (var tool in Enum.GetValues<ExternalTool>())
+            root.Children.Add(ToolCard(tool));
+    }
+
+    private void AboutPage(Panel root)
+    {
+        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+        header.Children.Add(new Image
+        {
+            Source = new BitmapImage(new Uri("pack://application:,,,/Assets/FileAction.png")),
+            Width = 64,
+            Height = 64,
+            Margin = new Thickness(0, 0, 20, 0),
+        });
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        var title = Text("FileAction", 28, FontWeights.SemiBold);
+        title.FontFamily = Theme.DisplayFont;
+        text.Children.Add(title);
+        text.Children.Add(Text(T("Chyťte soubor, ťukněte na klávesu, pusťte ho na formát.", "Grab a file, tap a key, drop it on a format."), 13.5, brush: Theme.Muted));
+        header.Children.Add(text);
+        root.Children.Add(header);
 
         root.Children.Add(SectionHeader(T("Aktualizace", "Updates")));
         root.Children.Add(UpdateCard());
@@ -206,54 +421,38 @@ internal sealed class SettingsWindow : Window
             {
                 _settings.CheckForUpdates = v;
                 Save();
-            })));
+            }), glyph: ""));
 
-        root.Children.Add(SectionHeader(T("Pomocné programy", "Helper programs")));
-        root.Children.Add(Card(T("Co zvládá FileAction sám", "Built in"),
-            T("Obrázky, PDF, tabulky, titulky a archivy. Audio a video potřebují FFmpeg, dokumenty Pandoc a soubory Office LibreOffice.",
-              "Images, PDFs, spreadsheets, subtitles and archives. Audio and video need FFmpeg, documents need Pandoc and Office files need LibreOffice."),
-            Button(T("Zkontrolovat znovu", "Check again"), () =>
-            {
-                _tools.Refresh();
-                Rebuild();
-            }, glyph: "\uE72C"),
-            glyph: "\uE90F"));
-        foreach (var tool in Enum.GetValues<ExternalTool>())
-            root.Children.Add(ToolCard(tool));
+        root.Children.Add(SectionHeader(T("Odkazy", "Links")));
+        root.Children.Add(Card(T("Web", "Website"), "fileaction.apexpiksel.cz",
+            Button(T("Otevřít", "Open"), () => OpenUrl("https://fileaction.apexpiksel.cz"), glyph: ""), glyph: ""));
+        root.Children.Add(Card(T("Zdrojový kód", "Source code"), "github.com/" + UpdateInfo.Repository,
+            Button(T("Otevřít", "Open"), () => OpenUrl("https://github.com/" + UpdateInfo.Repository), glyph: ""), glyph: ""));
 
-        var version = typeof(SettingsWindow).Assembly.GetName().Version;
-        var footer = Text($"FileAction {version?.ToString(3)} · " + T("vše běží lokálně, soubory se nikam neodesílají.", "everything runs locally, files never leave your PC."), 12, brush: Theme.Muted);
+        var footer = Text(T("Vše běží lokálně, soubory se nikam neodesílají.", "Everything runs locally, files never leave your PC."), 12, brush: Theme.Muted);
         footer.Margin = new Thickness(2, 24, 0, 0);
         root.Children.Add(footer);
-
-        _scroll.Content = root;
     }
+
+    private void OpenUrl(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "FileAction", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    // ------------------------------------------------------------------ helpers
 
     private static FrameworkElement Wrap(FrameworkElement element)
     {
         element.HorizontalAlignment = HorizontalAlignment.Left;
         element.Margin = new Thickness(0, 12, 0, 0);
         return element;
-    }
-
-    private UIElement Header()
-    {
-        var panel = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
-        var image = new Image
-        {
-            Source = new BitmapImage(new Uri("pack://application:,,,/Assets/FileAction.png")),
-            Width = 56,
-            Height = 56,
-            Margin = new Thickness(0, 0, 18, 0),
-        };
-        panel.Children.Add(image);
-        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        var title = Text("FileAction", 28, FontWeights.SemiBold);
-        title.FontFamily = Theme.DisplayFont;
-        text.Children.Add(title);
-        text.Children.Add(Text(T("Chyťte soubor, ťukněte na klávesu, pusťte ho na formát.", "Grab a file, tap a key, drop it on a format."), 13.5, brush: Theme.Muted));
-        panel.Children.Add(text);
-        return panel;
     }
 
     private Border KeyChooser(WheelKind wheel) => Segmented(
@@ -331,7 +530,7 @@ internal sealed class SettingsWindow : Window
         {
             status = T($"K dispozici je verze {update.Version}.", $"Version {update.Version} is available.");
             action = Button(Shell.Updater.IsInstalled ? T("Aktualizovat", "Update") : T("Stáhnout", "Download"),
-                () => _ = updater.InstallAsync(update), primary: true, glyph: "\uE896");
+                () => _ = updater.InstallAsync(update), primary: true, glyph: "");
         }
         else
         {
@@ -342,9 +541,9 @@ internal sealed class SettingsWindow : Window
             {
                 await updater.CheckAsync();
                 Rebuild();
-            }, glyph: "\uE72C");
+            }, glyph: "");
         }
-        return Card($"FileAction {current}", status, action, glyph: "\uE777");
+        return Card($"FileAction {current}", status, action, glyph: "");
     }
 
     private Border ToolCard(ExternalTool tool)
@@ -371,7 +570,7 @@ internal sealed class SettingsWindow : Window
                 {
                     if (await DownloadTool(tool))
                         Rebuild();
-                }, primary: true, glyph: "\uE896")
+                }, primary: true, glyph: "")
                 : Button(T("Nainstalovat", "Install"), () =>
             {
                 try
@@ -384,10 +583,16 @@ internal sealed class SettingsWindow : Window
                 {
                     MessageBox.Show(this, ex.Message, "FileAction", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
-            }, primary: true, glyph: "\uE896");
+            }, primary: true, glyph: "");
             install.Margin = new Thickness(10, 0, 0, 0);
             right.Children.Add(install);
         }
-        return Card(ToolLocator.DisplayName(tool), description, right);
+        var glyph = tool switch
+        {
+            ExternalTool.Ffmpeg => Glyphs.Video,
+            ExternalTool.Pandoc => Glyphs.Document,
+            _ => Glyphs.Table,
+        };
+        return Card(ToolLocator.DisplayName(tool), description, right, glyph: glyph);
     }
 }

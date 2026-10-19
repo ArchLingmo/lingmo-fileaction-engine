@@ -92,9 +92,23 @@ internal static class SelfTest
         }
 
         SettingsWindow.Operations = () => [.. core, .. actions];
-        var settingsWindow = new SettingsWindow(settings, tools, () => { });
-        SaveWindow(settingsWindow, Path.Combine(outDir, "settings.png"), 560);
-        log.Add($"ok {Path.GetFileName(outDir)}/settings");
+        settings.FavoriteOperations = ["image.to.webp", "image.compress"];
+        settings.HiddenOperations = ["image.to.tiff"];
+        foreach (var page in Enum.GetValues<SettingsPage>())
+        {
+            var settingsWindow = new SettingsWindow(settings, tools, () => { }) { Page = page };
+            settingsWindow.ExpandForPreview();
+            var file = page == SettingsPage.General ? "settings" : "settings-" + page.ToString().ToLowerInvariant();
+            SaveWindow(settingsWindow, Path.Combine(outDir, file + ".png"), page == SettingsPage.Wheels ? 1240 : 1000);
+            settingsWindow.Close();
+            log.Add($"ok {Path.GetFileName(outDir)}/{file}");
+        }
+        var toolsWheel = new SettingsWindow(settings, tools, () => { });
+        toolsWheel.ShowWheel(WheelKind.Tools, 0);
+        toolsWheel.ExpandForPreview();
+        SaveWindow(toolsWheel, Path.Combine(outDir, "settings-wheels-tools.png"), 1240);
+        toolsWheel.Close();
+        log.Add($"ok {Path.GetFileName(outDir)}/settings-wheels-tools");
 
         var jobs = new JobsWindow();
         var running = jobs.Add(N("Převod na MP4", "Convert to MP4"), N("klip.mov", "clip.mov"), () => { }, @"C:\x.mov");
@@ -104,12 +118,6 @@ internal static class SelfTest
         SaveWindow(jobs, Path.Combine(outDir, "jobs.png"), 380, desktop: true);
         jobs.Close();
         log.Add($"ok {Path.GetFileName(outDir)}/jobs");
-
-        settings.FavoriteOperations = ["image.to.webp", "image.compress"];
-        settings.HiddenOperations = ["image.to.tiff"];
-        var editor = new WheelEditorWindow(settings, [.. core, .. actions], () => { });
-        SaveWindow(editor, Path.Combine(outDir, "wheel-editor.png"), 640);
-        log.Add($"ok {Path.GetFileName(outDir)}/wheel-editor");
 
         // Customised wheel and the "repeat last" view.
         var photo = new List<FileItem> { new(N(@"C:\Fotky\dovolená.jpg", @"C:\Photos\vacation.jpg")) };

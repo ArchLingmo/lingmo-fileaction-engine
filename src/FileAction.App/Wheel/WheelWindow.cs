@@ -597,6 +597,76 @@ internal sealed class WheelWindow : Window
         _canvas.Children.Add(_hubContent);
     }
 
+    /// <summary>
+    /// A still picture of a wheel with these slices, drawn exactly like the real one (used by the
+    /// wheel page in Settings). <paramref name="highlight"/> slices are painted with the accent.
+    /// </summary>
+    internal static FrameworkElement Preview(IReadOnlyList<Operation> ops, string title, string detail, ISet<string>? highlight = null)
+    {
+        var canvas = new Canvas { Width = Size, Height = Size };
+        var disc = OuterRadius + Rim;
+        var backdrop = new Ellipse { Width = 2 * disc, Height = 2 * disc, Fill = Theme.Backdrop, Stroke = Theme.BackdropEdge, StrokeThickness = 1, Effect = Theme.Shadow(28) };
+        Canvas.SetLeft(backdrop, Pad);
+        Canvas.SetTop(backdrop, Pad);
+        canvas.Children.Add(backdrop);
+
+        var n = ops.Count;
+        var step = n == 0 ? 360 : 360.0 / n;
+        var labelRadius = InnerRadius + (OuterRadius - InnerRadius) * 0.54;
+        var labelWidth = n <= 2 ? 120 : Math.Clamp(2 * labelRadius * Math.Sin(step / 2 * Math.PI / 180) * 0.84, 48, 110);
+        for (var i = 0; i < n; i++)
+        {
+            var on = highlight?.Contains(ops[i].Id) == true;
+            var a0 = i * step - step / 2;
+            canvas.Children.Add(new Path
+            {
+                Data = n == 1 ? Ring() : Sector(a0, a0 + step),
+                Fill = on ? Theme.AccentGradient : Theme.Slice,
+                Stroke = on ? Brushes.Transparent : Theme.SliceEdge,
+                StrokeThickness = 1,
+            });
+            var label = SliceLabel(ops[i]);
+            foreach (var child in label.Children.OfType<TextBlock>().Where(_ => on))
+                child.Foreground = Theme.TextOnAccent;
+            var fit = new Viewbox
+            {
+                Child = label,
+                Stretch = Stretch.Uniform,
+                StretchDirection = StretchDirection.DownOnly,
+                MaxWidth = labelWidth,
+                MaxHeight = (OuterRadius - InnerRadius) * 0.8,
+            };
+            var mid = n == 1 ? new Point(Size / 2, Size / 2 - labelRadius) : Polar(labelRadius, i * step);
+            fit.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+            Canvas.SetLeft(fit, mid.X - fit.DesiredSize.Width / 2);
+            Canvas.SetTop(fit, mid.Y - fit.DesiredSize.Height / 2);
+            canvas.Children.Add(fit);
+        }
+        if (n == 0)
+            canvas.Children.Add(new Path { Data = Ring(), Fill = Theme.Slice, Stroke = Theme.SliceEdge, StrokeThickness = 1, Opacity = 0.5 });
+
+        var hubSize = 2 * (InnerRadius - 6);
+        var hub = new Ellipse { Width = hubSize, Height = hubSize, Fill = Theme.Hub, Stroke = Theme.PanelBorder, StrokeThickness = 1, Effect = Theme.Shadow(12) };
+        Canvas.SetLeft(hub, Size / 2 - hubSize / 2);
+        Canvas.SetTop(hub, Size / 2 - hubSize / 2);
+        canvas.Children.Add(hub);
+
+        var text = new StackPanel { Width = InnerRadius * 1.75 };
+        var t = HubText(16, FontWeights.SemiBold);
+        t.Text = title;
+        t.Foreground = Theme.Text;
+        var d = HubText(11.5, FontWeights.Normal);
+        d.Text = detail;
+        d.Foreground = Theme.Muted;
+        text.Children.Add(t);
+        text.Children.Add(d);
+        text.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+        Canvas.SetLeft(text, Size / 2 - text.Width / 2);
+        Canvas.SetTop(text, Size / 2 - text.DesiredSize.Height / 2);
+        canvas.Children.Add(text);
+        return new Viewbox { Child = canvas, Stretch = Stretch.Uniform };
+    }
+
     /// <summary>Slices grow out of the centre one after another.</summary>
     private void AnimateSlicesIn()
     {
