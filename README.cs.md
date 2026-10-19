@@ -154,6 +154,7 @@ FileAction je zdarma a zdarma zůstane. Pokud vám šetří čas, můžete jeho 
 
 - **Solana** (SOL, USDC): `J7vmQqiFe6t3RSX9m8qCTFkxe6xDRzbPy5nMaeGNV7bL`  
   QR kód a tlačítko „Otevřít v peněžence“ najdete na [webu](https://fileaction.apexpiksel.cz/?lang=cs#support).
+- **Kartou nebo přes PayPal:** [ko-fi.com/metamorfolog](https://ko-fi.com/metamorfolog)
 
 ## Licence
 

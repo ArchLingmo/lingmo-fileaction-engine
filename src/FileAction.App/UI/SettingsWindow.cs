@@ -478,16 +478,19 @@ internal sealed partial class SettingsWindow : Window
         }, primary: true, glyph: "");
         var web = Button(T("QR kód na webu", "QR code on the website"), () => Shell.Updater.Open(FeedbackWindow.Website + "/#support"), glyph: "");
         web.Margin = new Thickness(8, 0, 0, 0);
+        var kofi = Button(T("Kartou přes Ko-fi", "Card via Ko-fi"), () => Shell.Updater.Open("https://ko-fi.com/metamorfolog"), glyph: "");
+        kofi.Margin = new Thickness(8, 0, 0, 0);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
         buttons.Children.Add(copy);
         buttons.Children.Add(web);
+        buttons.Children.Add(kofi);
         buttons.Children.Add(copied);
         var below = new StackPanel();
         below.Children.Add(address);
         below.Children.Add(buttons);
         return Card(T("Podpořit vývoj", "Support development"),
-            T("FileAction je zdarma a zdarma zůstane. Pokud vám šetří čas, pomůže dar přes Solanu (SOL nebo USDC).",
-              "FileAction is free and will stay free. If it saves you time, a donation via Solana (SOL or USDC) helps."),
+            T("FileAction je zdarma a zdarma zůstane. Pokud vám šetří čas, pomůže dar přes Solanu (SOL nebo USDC) nebo kartou na Ko-fi.",
+              "FileAction is free and will stay free. If it saves you time, a donation via Solana (SOL or USDC) or by card on Ko-fi helps."),
             null, below, glyph: "");
     }
 

@@ -488,6 +488,7 @@ button.btn { border: 0; font: inherit; font-weight: 650; cursor: pointer; color:
 .support-address { display: block; font-size: 14px; padding: 10px 12px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line-2); word-break: break-all; user-select: all; }
 .support-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .support-copied { color: #3cc36e; font-size: 15px; }
+.support-kofi { margin-top: 14px; justify-content: space-between; }
 @media (max-width: 680px) {
   .support { flex-direction: column; align-items: stretch; padding: 20px 16px; }
   .support-qr { align-self: center; }

@@ -155,6 +155,7 @@ FileAction is free and will stay free. If it saves you time, you can support its
 
 - **Solana** (SOL, USDC): `J7vmQqiFe6t3RSX9m8qCTFkxe6xDRzbPy5nMaeGNV7bL`  
   QR code and an "Open in wallet" button on the [website](https://fileaction.apexpiksel.cz/#support).
+- **Card or PayPal:** [ko-fi.com/metamorfolog](https://ko-fi.com/metamorfolog)
 
 ## License
 
