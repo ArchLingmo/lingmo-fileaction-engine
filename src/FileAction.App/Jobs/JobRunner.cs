@@ -11,10 +11,14 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
 {
     private JobsWindow? _window;
 
+    /// <summary>Files a job created (watched folders use it to skip their own results).</summary>
+    public event Action<IReadOnlyList<string>>? Produced;
+
     public void Start(Operation op, IReadOnlyList<FileItem> items) => Start(op, items, null);
 
     /// <param name="parameters">Values for the operation's questions; when given (repeat last) no dialog is shown.</param>
-    public async void Start(Operation op, IReadOnlyList<FileItem> items, IReadOnlyDictionary<string, string>? parameters)
+    /// <param name="automatic">Started by a watched folder: not remembered for "repeat last" and never revealed.</param>
+    public async void Start(Operation op, IReadOnlyList<FileItem> items, IReadOnlyDictionary<string, string>? parameters, bool automatic = false)
     {
         if (op is NeedsToolOperation needs)
         {
@@ -45,7 +49,8 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
                 return;
             parameters = dialog.Values;
         }
-        Remember(op, parameters);
+        if (!automatic)
+            Remember(op, parameters);
 
         _window ??= new JobsWindow();
         using var cts = new CancellationTokenSource();
@@ -74,8 +79,9 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
         try
         {
             var result = await Task.Run(() => op.ExecuteAsync(items, context));
+            Produced?.Invoke(result.Outputs);
             card.Complete(result.Outputs, result.Message, result.Note);
-            if (settings.RevealResult && result.Outputs.Count > 0)
+            if (!automatic && settings.RevealResult && result.Outputs.Count > 0)
                 JobCard.Reveal(result.Outputs[0]);
         }
         catch (OperationCanceledException)

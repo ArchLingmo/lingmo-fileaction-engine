@@ -36,6 +36,10 @@ The wheel stays open until you drop, so you can release the key and tap another 
 
 **Your own wheel:** in **Settings → Customize wheels** you can star favourite slices (they always come first, in the same place) and hide the ones you never use.
 
+**Presets:** in **Settings → Presets** put together slices of your own, like "JPG 80 %, max 1920 px, no metadata" or "MP4 720p, small file". They appear on the wheel next to the built-in ones.
+
+**Watched folders:** in **Settings → Watched folders** pick a folder and what to do with new files, e.g. screenshots → WebP or phone photos HEIC → JPG. Every new file is processed once it has finished downloading or copying; the originals stay untouched.
+
 **No mouse:** select files in File Explorer, or copy a file or a screenshot (**Win + Shift + S**), and press **Ctrl + Alt + Space**. Arrows pick a slice, Enter runs it, Tab switches wheels, Esc closes, 1–9 run a slice directly.
 You can also open the wheel with **right-click → FileAction…** (on Windows 11 under “Show more options”).
 

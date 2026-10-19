@@ -55,6 +55,12 @@ public sealed class AppSettings
 
     public bool CheckForUpdates { get; set; } = true;
 
+    /// <summary>Slices the user put together (e.g. "JPG 70 %"); they appear on the wheels like the built-in ones.</summary>
+    public List<Preset> Presets { get; set; } = [];
+
+    /// <summary>Folders whose new files are processed automatically.</summary>
+    public List<WatchFolder> WatchFolders { get; set; } = [];
+
     public WheelKind? WheelFor(ModifierKey key)
     {
         if (key == ModifierKey.None)

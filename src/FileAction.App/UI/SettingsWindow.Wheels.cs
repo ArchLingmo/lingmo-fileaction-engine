@@ -20,7 +20,7 @@ internal sealed partial class SettingsWindow
     private int _group;
 
     /// <summary>File types shown as groups, with sample names used to find which slices apply.</summary>
-    private static (string Czech, string English, string Glyph, string[] Samples)[] Groups =>
+    internal static (string Czech, string English, string Glyph, string[] Samples)[] Groups =>
     [
         // Two formats per group, so "convert to X" shows up even when one sample already is X.
         ("Obrázky", "Images", Glyphs.Photo, ["a.png", "a.jpg", "a.gif"]),
@@ -35,9 +35,11 @@ internal sealed partial class SettingsWindow
     ];
 
     /// <summary>Every group with its slices; slices that work for anything (archive, actions) form the last group.</summary>
-    private List<(string Name, string Glyph, List<Operation> Ops)> GroupedOperations()
+    private static List<(string Name, string Glyph, List<Operation> Ops)> GroupedOperations() => Group(Operations?.Invoke() ?? []);
+
+    /// <summary>Splits operations into the file-type groups (each operation once, in the first group it fits).</summary>
+    internal static List<(string Name, string Glyph, List<Operation> Ops)> Group(IReadOnlyList<Operation> all)
     {
-        var all = Operations?.Invoke() ?? [];
         var folder = new FileItem(Path.GetTempPath());
         var shown = new HashSet<string>();
         var groups = new List<(string, string, List<Operation>)>();
@@ -51,7 +53,7 @@ internal sealed partial class SettingsWindow
         return groups;
     }
 
-    private static bool Applies(Operation op, IReadOnlyList<FileItem> samples) =>
+    internal static bool Applies(Operation op, IReadOnlyList<FileItem> samples) =>
         samples.Any(s => op.AppliesTo([s]) || op.AppliesTo([s, s with { Path = "b" + Path.GetExtension(s.Path) }]));
 
     /// <summary>Shows the wheel page for one wheel and file type (used by the self-test).</summary>

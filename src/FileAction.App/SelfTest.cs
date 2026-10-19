@@ -36,7 +36,7 @@ internal static class SelfTest
 
             log.AddRange(SmokeTest.Run(Path.Combine(outDir, "smoke")));
             // Saved after every step, so a hard crash (which skips the catch below) still shows where it stopped.
-            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestOcr(outDir, log), () => TestUpdateCheck(log) })
+            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestWatchFolder(outDir, log), () => TestOcr(outDir, log), () => TestUpdateCheck(log) })
             {
                 File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
                 step();
@@ -94,6 +94,10 @@ internal static class SelfTest
         SettingsWindow.Operations = () => [.. core, .. actions];
         settings.FavoriteOperations = ["image.to.webp", "image.compress"];
         settings.HiddenOperations = ["image.to.tiff"];
+        var web = new Preset { Name = "Web 1920", Kind = PresetKind.Image, Format = "jpg", Quality = 80, MaxSide = 1920, StripMetadata = true };
+        settings.Presets = [web, new Preset { Name = N("MP4 malé", "MP4 small"), Kind = PresetKind.Video, Format = "mp4", Height = 720, VideoQuality = VideoQuality.Small }];
+        settings.WatchFolders = [new WatchFolder { Path = N(@"C:\Users\Jana\Pictures\Snímky obrazovky", @"C:\Users\Jana\Pictures\Screenshots"), OperationId = "preset." + web.Id }];
+        SettingsWindow.Operations = () => [.. core, .. settings.Presets.Select(PresetOperations.Build), .. actions];
         foreach (var page in Enum.GetValues<SettingsPage>())
         {
             var settingsWindow = new SettingsWindow(settings, tools, () => { }) { Page = page };
@@ -103,6 +107,14 @@ internal static class SelfTest
             settingsWindow.Close();
             log.Add($"ok {Path.GetFileName(outDir)}/{file}");
         }
+        var presetDialog = new PresetDialog(web);
+        SaveWindow(presetDialog, Path.Combine(outDir, "preset-dialog.png"), 620);
+        presetDialog.Close();
+        var watchDialog = new WatchFolderDialog(settings.WatchFolders[0], SettingsWindow.Operations());
+        SaveWindow(watchDialog, Path.Combine(outDir, "watch-dialog.png"), 640);
+        watchDialog.Close();
+        log.Add($"ok {Path.GetFileName(outDir)}/preset and watch dialogs");
+
         var toolsWheel = new SettingsWindow(settings, tools, () => { });
         toolsWheel.ShowWheel(WheelKind.Tools, 0);
         toolsWheel.ExpandForPreview();
@@ -215,6 +227,62 @@ internal static class SelfTest
         var linkDrop = DropContent.Read(link, materialize: false) ?? throw new InvalidOperationException("link not recognised");
         Check(linkDrop.Items.Single().Format == "webp", "link keeps its file type");
         log.Add("ok drop/link");
+    }
+
+    /// <summary>
+    /// A real watched folder: a new PNG gets the preset once, the result is not processed again and a
+    /// half-written download is ignored.
+    /// </summary>
+    private static void TestWatchFolder(string outDir, List<string> log)
+    {
+        SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext());
+        var folder = Path.Combine(outDir, "watched");
+        Directory.CreateDirectory(folder);
+        var preset = new Preset { Name = "Watch", Kind = PresetKind.Image, Format = Preset.SameFormat, Percent = 50 };
+        var settings = new AppSettings
+        {
+            Presets = [preset],
+            WatchFolders = [new WatchFolder { Path = folder, OperationId = "preset." + preset.Id }],
+        };
+        var tools = new ToolLocator();
+        var jobs = new JobRunner(settings, tools);
+        IReadOnlyList<Operation> ops = [PresetOperations.Build(preset)];
+        using var watcher = new Shell.FolderWatcher(settings, tools, jobs, () => ops, System.Windows.Threading.Dispatcher.CurrentDispatcher);
+        watcher.Apply();
+
+        var bitmap = BitmapSource.Create(64, 64, 96, 96, PixelFormats.Bgra32, null, new byte[64 * 64 * 4], 64 * 4);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using (var stream = File.Create(Path.Combine(folder, "shot.png")))
+            encoder.Save(stream);
+        File.WriteAllText(Path.Combine(folder, "movie.mp4.crdownload"), "partial");
+
+        var expected = Path.Combine(folder, "shot (Watch).png");
+        Pump(() => File.Exists(expected), TimeSpan.FromSeconds(20));
+        Check(File.Exists(expected), "watched folder produced the result");
+        // Long enough for the watcher to notice the result and (wrongly) shrink it again.
+        Pump(() => false, TimeSpan.FromSeconds(4));
+        var files = Directory.GetFiles(folder).Select(f => Path.GetFileName(f)).Order().ToList();
+        Check(files.SequenceEqual(["movie.mp4.crdownload", "shot (Watch).png", "shot.png"]), "only one result: " + string.Join(", ", files));
+        log.Add("ok watched folder");
+    }
+
+    /// <summary>Runs the dispatcher (async continuations, the watcher's callbacks) until done or timed out.</summary>
+    private static void Pump(Func<bool> done, TimeSpan timeout)
+    {
+        var until = DateTime.UtcNow + timeout;
+        while (!done() && DateTime.UtcNow < until)
+        {
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
+                new System.Windows.Threading.DispatcherOperationCallback(_ =>
+                {
+                    frame.Continue = false;
+                    return null;
+                }), null);
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+            Thread.Sleep(50);
+        }
     }
 
     /// <summary>Renders a line of text and reads it back with Windows OCR, when the runner has it.</summary>

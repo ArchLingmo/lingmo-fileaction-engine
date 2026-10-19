@@ -17,6 +17,8 @@ internal enum SettingsPage
     General,
     Gestures,
     Wheels,
+    Presets,
+    WatchFolders,
     Quality,
     Helpers,
     About,
@@ -129,6 +131,12 @@ internal sealed partial class SettingsWindow : Window
             case SettingsPage.Wheels:
                 WheelsPage(page);
                 break;
+            case SettingsPage.Presets:
+                PresetsPage(page);
+                break;
+            case SettingsPage.WatchFolders:
+                WatchFoldersPage(page);
+                break;
             case SettingsPage.Quality:
                 QualityPage(page);
                 break;
@@ -152,6 +160,8 @@ internal sealed partial class SettingsWindow : Window
         SettingsPage.General => T("Obecné", "General"),
         SettingsPage.Gestures => T("Gesta a zkratky", "Gestures & keys"),
         SettingsPage.Wheels => T("Kola", "Wheels"),
+        SettingsPage.Presets => T("Předvolby", "Presets"),
+        SettingsPage.WatchFolders => T("Sledované složky", "Watched folders"),
         SettingsPage.Quality => T("Kvalita", "Quality"),
         SettingsPage.Helpers => T("Pomocné programy", "Helper programs"),
         _ => T("O aplikaci", "About"),
@@ -162,7 +172,9 @@ internal sealed partial class SettingsWindow : Window
         SettingsPage.General => "",
         SettingsPage.Gestures => "",
         SettingsPage.Wheels => "",
-        SettingsPage.Quality => "",
+        SettingsPage.Presets => "",
+        SettingsPage.WatchFolders => "",
+        SettingsPage.Quality => "",
         SettingsPage.Helpers => "",
         _ => "",
     };

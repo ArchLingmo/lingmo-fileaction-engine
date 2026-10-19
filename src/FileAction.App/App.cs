@@ -48,6 +48,7 @@ internal sealed class App : Application
     private GlobalInput? _input;
     private WheelController _controller = null!;
     private TrayIcon? _tray;
+    private FolderWatcher? _watcher;
     private HotkeyListener? _hotkey;
     private HotkeyPreset? _activeHotkey;
     private readonly Updater _updater = new();
@@ -93,6 +94,8 @@ internal sealed class App : Application
             }
         });
         _tray = CreateTray();
+        _watcher = new FolderWatcher(_settings, _tools, jobs, () => _controller.AllOperations, Dispatcher);
+        _watcher.Apply();
         SettingsWindow.Updater = _updater;
         SettingsWindow.Operations = () => _controller.AllOperations;
         _updater.StartBackgroundChecks(_settings, update => _tray?.OfferUpdate(update.Version, () => _ = _updater.InstallAsync(update)));
@@ -153,10 +156,12 @@ internal sealed class App : Application
     private void OnSettingsChanged()
     {
         var language = _settings.Language ?? Loc.Detect();
-        if (language != Loc.Current)
+        var relocalized = language != Loc.Current;
+        Loc.Current = language;
+        _controller.Reload();
+        _watcher?.Apply();
+        if (relocalized)
         {
-            Loc.Current = language;
-            _controller.Relocalize();
             _tray?.Dispose();
             _tray = CreateTray();
         }
@@ -275,6 +280,7 @@ internal sealed class App : Application
     {
         _hotkey?.Dispose();
         _input?.Dispose();
+        _watcher?.Dispose();
         _tray?.Dispose();
         _settings.Save();
         base.OnExit(e);

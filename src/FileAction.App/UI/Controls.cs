@@ -270,6 +270,28 @@ internal static class Controls
         return button;
     }
 
+    /// <summary>A single-line text box in the card style.</summary>
+    public static TextBox TextField(string text, int maxLength = 200) => new()
+    {
+        Text = text,
+        MaxLength = maxLength,
+        Padding = new Thickness(10, 7, 10, 7),
+        FontSize = 14,
+        Background = Theme.Card,
+        Foreground = Theme.Text,
+        CaretBrush = Theme.Text,
+        BorderBrush = Theme.PanelBorder,
+        VerticalContentAlignment = VerticalAlignment.Center,
+    };
+
+    /// <summary>A muted label above a field.</summary>
+    public static TextBlock FieldLabel(string text, double top = 16)
+    {
+        var label = Text(text, 13, brush: Theme.Muted);
+        label.Margin = new Thickness(0, top, 0, 6);
+        return label;
+    }
+
     /// <summary>A small coloured status label, e.g. "found" / "missing".</summary>
     public static Border Badge(string text, bool good) => new()
     {

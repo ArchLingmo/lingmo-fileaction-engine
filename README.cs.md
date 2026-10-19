@@ -36,6 +36,10 @@ Kolo zůstane otevřené, dokud soubor nepustíte. Klávesu tedy můžete pustit
 
 **Vlastní kolo:** v **Nastavení → Upravit kolo** označíte oblíbené výseče hvězdičkou (budou vždy první a na stejném místě) a nepoužívané skryjete.
 
+**Předvolby:** v **Nastavení → Předvolby** si poskládáte vlastní výseče, třeba „JPG 80 %, max 1920 px, bez metadat“ nebo „MP4 720p, malý soubor“. Objeví se na kole vedle vestavěných.
+
+**Sledované složky:** v **Nastavení → Sledované složky** vyberete složku a co se má s novými soubory udělat, třeba snímky obrazovky → WebP nebo fotky z telefonu HEIC → JPG. Každý nový soubor se zpracuje, až je celý stažený nebo zkopírovaný; originály zůstávají beze změny.
+
 **Bez myši:** vyberte soubory v Průzkumníku, nebo zkopírujte soubor či snímek obrazovky (**Win + Shift + S**), a stiskněte **Ctrl + Alt + Mezerník**. Šipkami vyberete výseč, Enter potvrdí, Tab přepne kolo, Esc zavře, čísla 1–9 spustí výseč přímo.
 Kolo otevřete i přes **pravé tlačítko → FileAction…** (ve Windows 11 pod „Zobrazit další možnosti“).
 

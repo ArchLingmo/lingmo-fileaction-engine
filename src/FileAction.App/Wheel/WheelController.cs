@@ -18,7 +18,7 @@ internal sealed class WheelController
     private readonly ToolLocator _tools;
     private readonly JobRunner _jobs;
     private readonly GlobalInput _input;
-    private IReadOnlyList<Operation> _coreOperations = BuildOperations();
+    private IReadOnlyList<Operation> _coreOperations;
     private IReadOnlyList<Operation> _actions;
     private readonly List<string> _pendingPaths = [];
     private readonly DispatcherTimer _argsTimer;
@@ -30,6 +30,7 @@ internal sealed class WheelController
         _tools = tools;
         _jobs = jobs;
         _input = input;
+        _coreOperations = BuildOperations(settings);
         _actions = FileActions.Build(settings, settings.Save);
 
         // Explorer starts one process per selected file; gather paths that arrive close together.
@@ -57,16 +58,22 @@ internal sealed class WheelController
         };
     }
 
-    /// <summary>Rebuilds the wheels after the UI language changed (labels are fixed when an operation is created).</summary>
-    public void Relocalize()
+    /// <summary>
+    /// Rebuilds the wheels after the settings changed: the UI language (labels are fixed when an operation
+    /// is created) or the user's presets.
+    /// </summary>
+    public void Reload()
     {
-        _wheel?.Finish();
-        _coreOperations = BuildOperations();
+        _coreOperations = BuildOperations(_settings);
         _actions = FileActions.Build(_settings, _settings.Save);
     }
 
     /// <summary>The cross-platform catalog plus tools that need Windows itself (OCR).</summary>
     public static IReadOnlyList<Operation> BuildOperations() => [.. Catalog.Build(), new Ocr.OcrOperation()];
+
+    /// <summary>The built-in operations followed by the user's presets.</summary>
+    public static IReadOnlyList<Operation> BuildOperations(AppSettings settings) =>
+        [.. BuildOperations(), .. settings.Presets.Select(PresetOperations.Build)];
 
     /// <summary>
     /// What fits these items. Conversions that need FFmpeg or Pandoc stay on the wheel even before those are

@@ -102,6 +102,25 @@ public static class ImageBackend
             image.Write(output, ToMagickFormat(format));
         }, ct);
 
+    /// <summary>A user preset: optional resize, grayscale and metadata removal, saved in <paramref name="format"/>.</summary>
+    public static Task PresetAsync(string input, string output, string format, int quality, int? maxSide, int? percent,
+        bool grayscale, bool strip, CancellationToken ct) =>
+        Task.Run(() =>
+        {
+            using var image = Load(input);
+            if (maxSide is > 0)
+                ResizeMax(image, (uint)maxSide.Value);
+            else if (percent is > 0 and < 100)
+                ResizePercent(image, percent.Value);
+            if (grayscale)
+                Grayscale(image);
+            if (strip)
+                image.Strip();
+            ct.ThrowIfCancellationRequested();
+            PrepareFor(image, format, quality);
+            image.Write(output, ToMagickFormat(format));
+        }, ct);
+
     public static Task ImagesToPdfAsync(IReadOnlyList<string> inputs, string output, int quality, CancellationToken ct) =>
         Task.Run(() =>
         {
