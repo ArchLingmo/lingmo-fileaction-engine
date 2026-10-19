@@ -489,8 +489,35 @@
     });
   }
 
+  // ---------- Support ----------
+  function support() {
+    const button = $("#sol-copy");
+    if (!button) return;
+    const note = $("#sol-copied");
+    button.addEventListener("click", async () => {
+      const address = button.dataset.copy;
+      let ok = false;
+      try {
+        await navigator.clipboard.writeText(address);
+        ok = true;
+      } catch {
+        // Older browsers or no clipboard permission: select the address so it can be copied by hand.
+        const range = document.createRange();
+        range.selectNodeContents($("#sol-address"));
+        const selection = getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+      note.textContent = ok
+        ? (lang === "cs" ? "Zkopírováno" : "Copied")
+        : (lang === "cs" ? "Adresa je označená, zkopírujte ji Ctrl+C" : "Address selected, press Ctrl+C");
+      setTimeout(() => { note.textContent = ""; }, 2500);
+    });
+  }
+
   setLang(lang);
   feedback();
+  support();
   primaryForLinux();
   loadRelease();
   reveal();

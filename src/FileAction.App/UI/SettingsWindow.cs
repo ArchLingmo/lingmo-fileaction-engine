@@ -434,9 +434,61 @@ internal sealed partial class SettingsWindow : Window
         root.Children.Add(Card(T("Zdrojový kód", "Source code"), "github.com/" + UpdateInfo.Repository,
             Button(T("Otevřít", "Open"), () => Shell.Updater.Open("https://github.com/" + UpdateInfo.Repository), glyph: ""), glyph: ""));
 
+        root.Children.Add(SectionHeader(T("Podpora", "Support")));
+        root.Children.Add(SupportCard());
+
         var footer = Text(T("Vše běží lokálně, soubory se nikam neodesílají.", "Everything runs locally, files never leave your PC."), 12, brush: Theme.Muted);
         footer.Margin = new Thickness(2, 24, 0, 0);
         root.Children.Add(footer);
+    }
+
+    /// <summary>Donations go to this Solana address; the website shows it with a QR code.</summary>
+    private const string SolanaAddress = "J7vmQqiFe6t3RSX9m8qCTFkxe6xDRzbPy5nMaeGNV7bL";
+
+    private static Border SupportCard()
+    {
+        var address = new TextBox
+        {
+            Text = SolanaAddress,
+            IsReadOnly = true,
+            FontFamily = new System.Windows.Media.FontFamily("Cascadia Mono, Consolas"),
+            FontSize = 12.5,
+            Padding = new Thickness(8, 6, 8, 6),
+            Background = Theme.Page,
+            Foreground = Theme.Text,
+            BorderBrush = Theme.PanelBorder,
+            Margin = new Thickness(0, 12, 0, 0),
+        };
+        var copied = Text("", 12.5, brush: Theme.Success, wrap: false);
+        copied.VerticalAlignment = VerticalAlignment.Center;
+        copied.Margin = new Thickness(12, 0, 0, 0);
+        var copy = Button(T("Kopírovat adresu", "Copy address"), () =>
+        {
+            try
+            {
+                Clipboard.SetText(SolanaAddress);
+                copied.Text = T("Zkopírováno", "Copied");
+            }
+            catch (System.Runtime.InteropServices.ExternalException)
+            {
+                // The clipboard is busy in another app; the address can still be selected by hand.
+                address.Focus();
+                address.SelectAll();
+            }
+        }, primary: true, glyph: "");
+        var web = Button(T("QR kód na webu", "QR code on the website"), () => Shell.Updater.Open(FeedbackWindow.Website + "/#support"), glyph: "");
+        web.Margin = new Thickness(8, 0, 0, 0);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+        buttons.Children.Add(copy);
+        buttons.Children.Add(web);
+        buttons.Children.Add(copied);
+        var below = new StackPanel();
+        below.Children.Add(address);
+        below.Children.Add(buttons);
+        return Card(T("Podpořit vývoj", "Support development"),
+            T("FileAction je zdarma a zdarma zůstane. Pokud vám šetří čas, pomůže dar přes Solanu (SOL nebo USDC).",
+              "FileAction is free and will stay free. If it saves you time, a donation via Solana (SOL or USDC) helps."),
+            null, below, glyph: "");
     }
 
     // ------------------------------------------------------------------ helpers

@@ -147,6 +147,15 @@ packaging/              Linux tarball and the AUR PKGBUILD template
 website/                the project page (static)
 ```
 
+## Feedback and support
+
+Found a bug or have an idea? Write it in the app (**Settings → About → Send feedback**, also in the tray icon menu), use the [form on the website](https://fileaction.apexpiksel.cz/#feedback) or open an [issue](https://github.com/Metamorfolog/file_action/issues).
+
+FileAction is free and will stay free. If it saves you time, you can support its development:
+
+- **Solana** (SOL, USDC): `J7vmQqiFe6t3RSX9m8qCTFkxe6xDRzbPy5nMaeGNV7bL`  
+  QR code and an "Open in wallet" button on the [website](https://fileaction.apexpiksel.cz/#support).
+
 ## License
 
 [MIT](LICENSE). FileAction uses other open-source components under their own licenses; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

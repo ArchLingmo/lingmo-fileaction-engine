@@ -146,6 +146,15 @@ packaging/              balíček pro Linux a šablona PKGBUILD pro AUR
 website/                webová stránka projektu (statická)
 ```
 
+## Zpětná vazba a podpora
+
+Našli jste chybu nebo máte nápad? Napište ji v aplikaci (**Nastavení → O aplikaci → Napsat zpětnou vazbu**, taky v nabídce ikony v oznamovací oblasti), přes [formulář na webu](https://fileaction.apexpiksel.cz/?lang=cs#feedback) nebo založte [issue](https://github.com/Metamorfolog/file_action/issues).
+
+FileAction je zdarma a zdarma zůstane. Pokud vám šetří čas, můžete jeho vývoj podpořit:
+
+- **Solana** (SOL, USDC): `J7vmQqiFe6t3RSX9m8qCTFkxe6xDRzbPy5nMaeGNV7bL`  
+  QR kód a tlačítko „Otevřít v peněžence“ najdete na [webu](https://fileaction.apexpiksel.cz/?lang=cs#support).
+
 ## Licence
 
 [MIT](LICENSE). FileAction používá další open-source komponenty pod jejich vlastními licencemi, viz [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
