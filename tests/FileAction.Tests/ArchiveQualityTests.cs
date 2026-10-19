@@ -130,6 +130,9 @@ public sealed class ArchiveQualityTests : IDisposable
     [Fact]
     public async Task Names_windows_cannot_store_are_cleaned_not_lost()
     {
+        // On Linux these names are valid and are kept as they are.
+        if (!OperatingSystem.IsWindows())
+            return;
         var tar = Path.Combine(_dir, "linux.tar");
         await using (var stream = File.Create(tar))
         {
