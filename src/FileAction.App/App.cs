@@ -83,6 +83,9 @@ internal sealed class App : Application
         }
 
         _controller = new WheelController(_settings, _tools, jobs, _input);
+        // PDF → Word/ODT through Microsoft Word when it is installed (much better layout); else the built-in way.
+        Core.Backends.PdfBackend.OfficeConverter = WordConverter.ConvertAsync;
+        Core.Backends.PdfBackend.OfficeConverterInstalled = () => _settings.UseWordForPdf && WordConverter.IsInstalled;
         Ocr.OcrOperation.CopyToClipboard = text => Dispatcher.BeginInvoke(() =>
         {
             try

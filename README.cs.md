@@ -78,11 +78,11 @@ Obrázky, PDF, tabulky, titulky a archivy zvládá FileAction sám. Některé fo
 - **FFmpeg** (audio a video, 34 MB) a **Pandoc** (dokumenty, 35 MB) se stáhnou, až je poprvé budete potřebovat: kolo ukazuje jejich výseče ztlumené s popiskem „stáhnout FFmpeg“ a po puštění souboru se jednou zeptá, nástroj stáhne (ověří jeho zveřejněný otisk SHA-256) a převod provede. Pokud je už máte nainstalované (např. `winget install Gyan.FFmpeg`), FileAction použije ty,
 - **LibreOffice** (DOC, PPTX, ODS, převod dokumentů a tabulek do PDF) je potřeba doinstalovat zvlášť: `winget install TheDocumentFoundation.LibreOffice`.
 
-Co chybí, ukáže **Nastavení → Pomocné programy**, odkud jde i rovnou stáhnout nebo nainstalovat. Díky tomu, že nástroje nejsou v instalátoru, má instalátor pod 50 MB.
+Co chybí, ukáže **Nastavení → Pomocné programy**, odkud jde i rovnou stáhnout nebo nainstalovat. Díky tomu, že nástroje nejsou v instalátoru, má instalátor jen asi 50 MB.
 
 ## Instalace
 
-Stáhněte `FileAction-Setup-x.y.z.exe` z [Releases](../../releases) nebo z artefaktů posledního běhu [GitHub Actions](../../actions). Instalátor (pod 50 MB) nepotřebuje práva správce. K dispozici je také přenosná verze v `.zip`.
+Stáhněte `FileAction-Setup-x.y.z.exe` z [Releases](../../releases) nebo z artefaktů posledního běhu [GitHub Actions](../../actions). Instalátor (asi 50 MB) nepotřebuje práva správce. K dispozici je také přenosná verze v `.zip`.
 
 Aplikace je česky i anglicky a ve světlém i tmavém režimu; obojí se řídí nastavením Windows, jazyk jde přepnout v nastavení.
 

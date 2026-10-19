@@ -40,6 +40,62 @@ public static partial class FfmpegBackend
         };
     }
 
+    /// <summary>HDR (PQ/HLG) to SDR BT.709: without this an iPhone HDR clip re-encoded to 8 bit looks washed out.</summary>
+    public const string ToneMap = "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p";
+
+    /// <summary>
+    /// Encoder arguments that fit the source: HDR is tone-mapped for 8-bit video, cover art and the bit depth of
+    /// lossless audio are kept, and video→GIF fits portrait clips into 640 px instead of making them 1138 px tall.
+    /// </summary>
+    public static List<string> CodecArgs(string format, Settings s, MediaInfo info, bool toneMap)
+    {
+        var args = CodecArgs(format, s).ToList();
+        if (format == "gif")
+        {
+            var i = args.IndexOf("-vf") + 1;
+            args[i] = args[i].Replace("scale='min(640,iw)':-2", "scale='if(gt(iw,ih),min(640,iw),-2)':'if(gt(iw,ih),-2,min(640,ih))'");
+        }
+        if (info.Hdr && toneMap && args.IndexOf("-vf") is var vf and >= 0 && format != "gif")
+        {
+            args[vf + 1] = ToneMap + "," + args[vf + 1];
+            args.AddRange(["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"]);
+        }
+        if (format is "mp3" or "m4a" or "flac" && info.HasCover && !info.HasVideo && args.IndexOf("-vn") is var vn and >= 0)
+        {
+            // Keep the album cover: it is a (still) video stream that -vn would drop.
+            args.RemoveAt(vn);
+            args.InsertRange(vn, ["-map", "0:a:0", "-map", "0:v:0", "-c:v", "copy", "-disposition:v:0", "attached_pic"]);
+            if (format == "mp3")
+                args.AddRange(["-id3v2_version", "3"]);
+        }
+        if (format == "flac")
+            args.AddRange(["-sample_fmt", info.HighResAudio ? "s32" : "s16"]);
+        if (info.HighResAudio && args.IndexOf("pcm_s16le") is var le and >= 0)
+            args[le] = "pcm_s24le";
+        if (info.HighResAudio && args.IndexOf("pcm_s16be") is var be and >= 0)
+            args[be] = "pcm_s24be";
+        return args;
+    }
+
+    /// <summary>
+    /// Which streams go into a video file: the video, every audio track and the subtitles the container can
+    /// carry (only when they are all text; picture subtitles can't become mov_text), plus the metadata.
+    /// </summary>
+    public static List<string> StreamMaps(string format, MediaInfo info)
+    {
+        if (format is not ("mp4" or "mov" or "mkv" or "webm") || !info.HasVideo)
+            return [];
+        var maps = new List<string> { "-map", "0:v:0", "-map", "0:a?", "-map_metadata", "0" };
+        var allText = info.SubtitleCodecs.Count > 0 && info.SubtitleCodecs.All(c => c is "subrip" or "srt" or "ass" or "ssa" or "mov_text" or "webvtt" or "text");
+        if (format == "mkv" && info.SubtitleCodecs.Count > 0)
+            maps.AddRange(["-map", "0:s?", "-c:s", "copy"]);
+        else if (allText && format is "mp4" or "mov")
+            maps.AddRange(["-map", "0:s?", "-c:s", "mov_text"]);
+        else if (allText && format == "webm")
+            maps.AddRange(["-map", "0:s?", "-c:s", "webvtt"]);
+        return maps;
+    }
+
     /// <summary>Runs ffmpeg with <c>-i input [args] output</c> and maps its time= output to progress.</summary>
     public static Task RunAsync(
         OperationContext ctx,
@@ -95,9 +151,14 @@ public static partial class FfmpegBackend
         + int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture) * 60
         + double.Parse(m.Groups[3].Value, CultureInfo.InvariantCulture);
 
-    public static Task<string> ConvertAsync(FileItem item, string format, OperationContext ctx, IProgress<double> progress) =>
-        OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), item.BaseName, format, tmp =>
-            RunAsync(ctx, [item.Path], CodecArgs(format, ctx.Settings), tmp, progress));
+    public static async Task<string> ConvertAsync(FileItem item, string format, OperationContext ctx, IProgress<double> progress)
+    {
+        var info = await MediaProbe.ProbeAsync(ctx, item.Path).ConfigureAwait(false);
+        var toneMap = info.Hdr && await MediaProbe.CanToneMapAsync(ctx).ConfigureAwait(false);
+        List<string> args = [.. StreamMaps(format, info), .. CodecArgs(format, ctx.Settings, info, toneMap)];
+        return await OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), item.BaseName, format, tmp =>
+            RunAsync(ctx, [item.Path], args, tmp, progress, knownDuration: info.Duration)).ConfigureAwait(false);
+    }
 
     /// <summary>Re-encodes in the source container with extra filter/encoder args; output gets a suffix.</summary>
     public static Task<string> TransformAsync(

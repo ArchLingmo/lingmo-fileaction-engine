@@ -73,6 +73,7 @@ internal sealed class JobCard : Border
     private readonly Border _fill = new() { CornerRadius = new CornerRadius(2), Background = Theme.AccentGradient, HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
     private readonly Grid _bar = new() { Height = 4, Margin = new Thickness(0, 10, 0, 0) };
     private readonly TextBlock _status;
+    private bool _waiting;
     private readonly StackPanel _buttons;
     private readonly TextBlock _badge;
     private readonly Action<JobCard> _remove;
@@ -183,8 +184,22 @@ internal sealed class JobCard : Border
         _fill.BeginAnimation(OpacityProperty, new DoubleAnimation(0.35, 1, TimeSpan.FromMilliseconds(700)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
     }
 
+    /// <summary>Queued behind other jobs; cleared by the first progress report.</summary>
+    public void Waiting()
+    {
+        _waiting = true;
+        _status.Visibility = Visibility.Visible;
+        _status.Foreground = Theme.Muted;
+        _status.Text = T("Čeká, až doběhnou předchozí úlohy…", "Waiting for the previous jobs…");
+    }
+
     public void Report(double value)
     {
+        if (_waiting)
+        {
+            _waiting = false;
+            _status.Visibility = Visibility.Collapsed;
+        }
         if (_done || value <= 0)
             return;
         if (_value <= 0)

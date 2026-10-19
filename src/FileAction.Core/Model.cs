@@ -62,7 +62,11 @@ public sealed class OperationContext
             Directory.CreateDirectory(OutputDirectory);
             return OutputDirectory;
         }
-        var dir = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(sourcePath.TrimEnd('\\', '/')));
+        var full = System.IO.Path.GetFullPath(sourcePath);
+        // A drive root ("C:\") has no parent: results go into the root itself, not the app's working folder.
+        if (string.Equals(System.IO.Path.GetPathRoot(full), full, StringComparison.OrdinalIgnoreCase))
+            return full;
+        var dir = System.IO.Path.GetDirectoryName(System.IO.Path.TrimEndingDirectorySeparator(full));
         return string.IsNullOrEmpty(dir) ? Environment.CurrentDirectory : dir;
     }
 

@@ -19,7 +19,7 @@ public static class PdfBackend
     /// <summary>
     /// Renders every page. A single page becomes "name.png"; more pages go into a folder "name (pages)".
     /// </summary>
-    public static async Task<IEnumerable<string>> RenderAsync(FileItem item, string format, OperationContext ctx, IProgress<double> progress)
+    public static async Task<IEnumerable<string>> RenderAsync(FileItem item, string format, OperationContext ctx, IProgress<double> progress, string? folderLabel = null)
     {
         var bytes = await File.ReadAllBytesAsync(item.Path, ctx.CancellationToken).ConfigureAwait(false);
         var count = PDFtoImage.Conversion.GetPageCount(bytes);
@@ -33,25 +33,18 @@ public static class PdfBackend
             return [single];
         }
 
-        var folder = OutputPaths.UniqueDirectory(dir, $"{item.BaseName} ({T("stránky", "pages")})");
-        Directory.CreateDirectory(folder);
         var digits = count.ToString().Length;
-        try
+        return [await OutputPaths.ProduceDirectoryAsync(dir, $"{item.BaseName} ({folderLabel ?? T("stránky", "pages")})", async folder =>
         {
             for (var i = 0; i < count; i++)
             {
                 ctx.CancellationToken.ThrowIfCancellationRequested();
                 var path = Path.Combine(folder, $"{item.BaseName} - {(i + 1).ToString().PadLeft(digits, '0')}.{format}");
-                await Task.Run(() => SavePage(path, bytes, i, format, options, ctx.Settings.JpegQuality), ctx.CancellationToken).ConfigureAwait(false);
+                var page = i;
+                await Task.Run(() => SavePage(path, bytes, page, format, options, ctx.Settings.JpegQuality), ctx.CancellationToken).ConfigureAwait(false);
                 progress.Report((i + 1.0) / count);
             }
-        }
-        catch
-        {
-            OutputPaths.TryDelete(folder);
-            throw;
-        }
-        return [folder];
+        }).ConfigureAwait(false)];
     }
 
     /// <summary>Renders every page to "page-001.png"… in <paramref name="dir"/> (used for OCR).</summary>
@@ -82,13 +75,26 @@ public static class PdfBackend
     }
 
     /// <summary>Plain text, pages separated by blank lines (or "---" rules for Markdown).</summary>
+    /// <summary>The structured Markdown, or plain paragraphs if the layout analysis fails on an odd PDF.</summary>
+    private static string StructuredMarkdown(string path, string? imageDir, bool pageBreaks)
+    {
+        try
+        {
+            return PdfStructure.ToMarkdown(path, imageDir, pageBreaks);
+        }
+        catch (Exception ex) when (ex is not ConversionException and not OperationCanceledException)
+        {
+            return ExtractText(path, markdown: true);
+        }
+    }
+
     public static string ExtractText(string path, bool markdown)
     {
         using var document = UglyToad.PdfPig.PdfDocument.Open(path);
         var sb = new StringBuilder();
         foreach (var page in document.GetPages())
         {
-            var text = ContentOrderTextExtractor.GetText(page).Trim();
+            var text = PdfStructure.FixSymbols(ContentOrderTextExtractor.GetText(page)).Trim();
             if (text.Length == 0)
                 continue;
             if (sb.Length > 0)
@@ -134,18 +140,45 @@ public static class PdfBackend
         return sb.ToString().TrimEnd();
     }
 
+    /// <summary>PDF → TXT (plain text) or MD (headings, bold, lists; no pictures).</summary>
     public static Task<string> ToTextAsync(FileItem item, string format, OperationContext ctx) =>
         OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), item.BaseName, format, tmp =>
-            Task.Run(() => File.WriteAllText(tmp, ExtractText(item.Path, format == "md"), new UTF8Encoding(false)), ctx.CancellationToken));
+            Task.Run(() => File.WriteAllText(tmp, format == "md" ? StructuredMarkdown(item.Path, null, false) : ExtractText(item.Path, false), new UTF8Encoding(false)),
+                ctx.CancellationToken));
 
-    /// <summary>PDF → DOCX/HTML/EPUB/ODT: extract text to Markdown, then let pandoc build the document.</summary>
+    /// <summary>
+    /// Set by the Windows app: converts with Microsoft Word when it is installed (it keeps tables and layout
+    /// far better). Returns false when Word is missing or failed, and the built-in conversion runs instead.
+    /// </summary>
+    public static Func<string, string, string, CancellationToken, Task<bool>>? OfficeConverter { get; set; }
+
+    /// <summary>True when <see cref="OfficeConverter"/> can run on this machine (Word is installed).</summary>
+    public static Func<bool>? OfficeConverterInstalled { get; set; }
+
+    public static bool HasOfficeConverter => OfficeConverter is not null && (OfficeConverterInstalled?.Invoke() ?? false);
+
+    /// <summary>
+    /// PDF → DOCX/HTML/EPUB/ODT: Word when available; otherwise the PDF's structure (headings, bold, lists,
+    /// pictures) as Markdown, which pandoc turns into the document.
+    /// </summary>
     public static async Task<string> ToDocumentAsync(FileItem item, string format, OperationContext ctx)
     {
+        if (format is "docx" or "odt" && HasOfficeConverter && OfficeConverter is { } office)
+        {
+            var dir = ctx.OutputDirFor(item.Path);
+            var converted = false;
+            var result = await OutputPaths.ProduceOptionalAsync(dir, item.BaseName, format, async tmp =>
+                converted = await office(item.Path, tmp, format, ctx.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+            if (converted && result is not null)
+                return result;
+        }
+
         var tempDir = OutputPaths.TempDirectory();
         try
         {
             var md = Path.Combine(tempDir, item.BaseName + ".md");
-            await File.WriteAllTextAsync(md, ExtractText(item.Path, markdown: true), new UTF8Encoding(false), ctx.CancellationToken).ConfigureAwait(false);
+            var markdown = StructuredMarkdown(item.Path, tempDir, pageBreaks: format == "docx");
+            await File.WriteAllTextAsync(md, markdown, new UTF8Encoding(false), ctx.CancellationToken).ConfigureAwait(false);
             return await OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), item.BaseName, format, tmp =>
                 PandocBackend.ConvertAsync(ctx, md, "md", tmp, format)).ConfigureAwait(false);
         }
@@ -171,11 +204,7 @@ public static class PdfBackend
     public static async Task<IEnumerable<string>> SplitAsync(FileItem item, OperationContext ctx, IProgress<double> progress)
     {
         var dir = ctx.OutputDirFor(item.Path);
-        var folder = OutputPaths.UniqueDirectory(dir, $"{item.BaseName} ({T("stránky", "pages")})");
-        Directory.CreateDirectory(folder);
-        try
-        {
-            await Task.Run(() =>
+        return [await OutputPaths.ProduceDirectoryAsync(dir, $"{item.BaseName} ({T("stránky", "pages")})", folder => Task.Run(() =>
             {
                 using var source = Open(item.Path, PdfDocumentOpenMode.Import);
                 var count = source.PageCount;
@@ -188,14 +217,7 @@ public static class PdfBackend
                     single.Save(Path.Combine(folder, $"{item.BaseName} - {(i + 1).ToString().PadLeft(digits, '0')}.pdf"));
                     progress.Report((i + 1.0) / count);
                 }
-            }, ctx.CancellationToken).ConfigureAwait(false);
-        }
-        catch
-        {
-            OutputPaths.TryDelete(folder);
-            throw;
-        }
-        return [folder];
+            }, ctx.CancellationToken)).ConfigureAwait(false)];
     }
 
     public static void Rotate(string input, string output, int degrees)

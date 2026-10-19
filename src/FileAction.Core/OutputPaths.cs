@@ -24,7 +24,8 @@ public static class OutputPaths
     public static async Task<string> ProduceAsync(string dir, string baseName, string ext, Func<string, Task> produce)
     {
         Directory.CreateDirectory(dir);
-        var temp = Path.Combine(dir, $".{baseName}.{Guid.NewGuid().ToString("N")[..8]}.part.{ext}");
+        // Short on purpose: a long base name plus a suffix could exceed the 255-character name limit.
+        var temp = Path.Combine(dir, $".fa-{Guid.NewGuid().ToString("N")[..8]}.part.{ext}");
         try
         {
             await produce(temp).ConfigureAwait(false);
@@ -32,6 +33,52 @@ public static class OutputPaths
                 throw new ConversionException(T("Převod nevytvořil žádný výstup.", "The conversion produced no output."));
             var final = Unique(dir, baseName, ext);
             File.Move(temp, final);
+            return final;
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
+    /// <summary>
+    /// Like <see cref="ProduceAsync"/>, for a producer that may decline (returns null and leaves nothing behind
+    /// when it wrote no file).
+    /// </summary>
+    public static async Task<string?> ProduceOptionalAsync(string dir, string baseName, string ext, Func<string, Task> produce)
+    {
+        Directory.CreateDirectory(dir);
+        // Short on purpose: a long base name plus a suffix could exceed the 255-character name limit.
+        var temp = Path.Combine(dir, $".fa-{Guid.NewGuid().ToString("N")[..8]}.part.{ext}");
+        try
+        {
+            await produce(temp).ConfigureAwait(false);
+            if (!File.Exists(temp) || new FileInfo(temp).Length == 0)
+                return null;
+            var final = Unique(dir, baseName, ext);
+            File.Move(temp, final);
+            return final;
+        }
+        finally
+        {
+            TryDelete(temp);
+        }
+    }
+
+    /// <summary>
+    /// A folder of results (PDF pages, rendered pages): filled under a hidden temporary name and moved into
+    /// place only when complete, so nobody (a watched folder, the user) sees a half-written folder.
+    /// </summary>
+    public static async Task<string> ProduceDirectoryAsync(string dir, string name, Func<string, Task> produce)
+    {
+        Directory.CreateDirectory(dir);
+        var temp = Path.Combine(dir, $".fa-{Guid.NewGuid().ToString("N")[..8]}.part");
+        Directory.CreateDirectory(temp);
+        try
+        {
+            await produce(temp).ConfigureAwait(false);
+            var final = UniqueDirectory(dir, name);
+            Directory.Move(temp, final);
             return final;
         }
         finally
@@ -61,4 +108,11 @@ public static class OutputPaths
     }
 }
 
-public sealed class ConversionException(string message, Exception? inner = null) : Exception(message, inner);
+/// <param name="nothingToDo">
+/// Not a failure: the file is already what the operation would make (already small enough, already 720p).
+/// Shown as a neutral note, not as an error.
+/// </param>
+public sealed class ConversionException(string message, Exception? inner = null, bool nothingToDo = false) : Exception(message, inner)
+{
+    public bool NothingToDo { get; } = nothingToDo;
+}

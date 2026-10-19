@@ -418,6 +418,19 @@ internal sealed partial class SettingsWindow : Window
         root.Children.Add(SectionHeader(T("Pomocné programy", "Helper programs")));
         foreach (var tool in Enum.GetValues<ExternalTool>())
             root.Children.Add(ToolCard(tool));
+
+        if (Shell.WordConverter.IsInstalled)
+        {
+            root.Children.Add(SectionHeader("Microsoft Word"));
+            root.Children.Add(Card(T("PDF → Word přes Microsoft Word (zkušební)", "PDF → Word with Microsoft Word (experimental)"),
+                T("Word líp zachová tabulky a rozvržení. Na některých počítačích se ale jeho převod PDF na pozadí zasekne; pak FileAction po minutě převede PDF sám.",
+                  "Word keeps tables and layout better. On some PCs its PDF import hangs in the background; FileAction then converts the PDF itself after a minute."),
+                Toggle(_settings.UseWordForPdf, v =>
+                {
+                    _settings.UseWordForPdf = v;
+                    Save();
+                }), glyph: Glyphs.Document));
+        }
     }
 
     private void AboutPage(Panel root)

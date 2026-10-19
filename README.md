@@ -78,11 +78,11 @@ FileAction handles images, PDFs, spreadsheets, subtitles and archives on its own
 - **FFmpeg** (audio and video, 34 MB) and **Pandoc** (documents, 35 MB) are downloaded the first time you need them: the wheel shows their slices dimmed with “get FFmpeg”, and dropping a file there asks once, downloads the tool (checked against its published SHA-256) and runs the conversion. If you already have them installed (e.g. `winget install Gyan.FFmpeg`), FileAction uses those,
 - **LibreOffice** (DOC, PPTX, ODS, documents and spreadsheets to PDF) has to be installed separately: `winget install TheDocumentFoundation.LibreOffice`.
 
-**Settings → Helper programs** shows what is missing and can download or install it for you. Keeping the tools out of the installer keeps it under 50 MB.
+**Settings → Helper programs** shows what is missing and can download or install it for you. Keeping the tools out of the installer keeps it at about 50 MB.
 
 ## Install
 
-Download `FileAction-Setup-x.y.z.exe` from [Releases](../../releases), or from the artifacts of the latest [GitHub Actions](../../actions) run. The installer (under 50 MB) doesn't need admin rights. A portable `.zip` is available too.
+Download `FileAction-Setup-x.y.z.exe` from [Releases](../../releases), or from the artifacts of the latest [GitHub Actions](../../actions) run. The installer (about 50 MB) doesn't need admin rights. A portable `.zip` is available too.
 
 The app speaks English and Czech and comes in light and dark mode; both follow your Windows settings, and the language can be switched in Settings.
 

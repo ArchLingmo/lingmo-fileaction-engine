@@ -26,6 +26,8 @@ internal sealed class FolderWatcher : IDisposable
     private readonly Dictionary<string, DateTime> _ownResults = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _waiting = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _warned = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _watched = new(StringComparer.OrdinalIgnoreCase);
+    private readonly DispatcherTimer _retry;
 
     public FolderWatcher(AppSettings settings, ToolLocator tools, JobRunner jobs, Func<IReadOnlyList<Operation>> operations, Dispatcher dispatcher)
     {
@@ -34,6 +36,14 @@ internal sealed class FolderWatcher : IDisposable
         _jobs = jobs;
         _operations = operations;
         _dispatcher = dispatcher;
+        // Folders that were missing (USB disk, network drive) or whose watcher broke are picked up again.
+        _retry = new DispatcherTimer(DispatcherPriority.Background, dispatcher) { Interval = TimeSpan.FromMinutes(1) };
+        _retry.Tick += (_, _) =>
+        {
+            if (_settings.WatchFolders.Any(f => f.Enabled && !_watched.Contains(f.Path) && Directory.Exists(f.Path)))
+                Apply();
+        };
+        _retry.Start();
         jobs.Produced += outputs =>
         {
             lock (_ownResults)
@@ -61,9 +71,25 @@ internal sealed class FolderWatcher : IDisposable
                     InternalBufferSize = 64 * 1024,
                 };
                 watcher.Created += (_, e) => OnFile(e.FullPath);
-                watcher.Renamed += (_, e) => OnFile(e.FullPath);
+                // A rename is a new file only when it finishes a download ("x.crdownload" → "x.mp4"),
+                // not when the user renames a file that was already there.
+                watcher.Renamed += (_, e) =>
+                {
+                    if (!WatchRules.IsCandidate(e.OldFullPath))
+                        OnFile(e.FullPath);
+                };
+                var path = folder.Path;
+                watcher.Error += (_, e) => _dispatcher.BeginInvoke(() =>
+                {
+                    // Buffer overflow or the folder went away: start over, and say so once.
+                    Warn(path + "|error", T("Sledovaná složka", "Watched folder"),
+                        T($"Sledování {path} se přerušilo ({e.GetException().Message}). Zkusím to znovu.",
+                          $"Watching {path} stopped ({e.GetException().Message}). Trying again."));
+                    Apply();
+                });
                 watcher.EnableRaisingEvents = true;
                 _watchers.Add(watcher);
+                _watched.Add(folder.Path);
             }
             catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
             {
@@ -165,13 +191,16 @@ internal sealed class FolderWatcher : IDisposable
         }
     }
 
+    /// <summary>A file FileAction wrote, or one inside a folder it wrote (split PDF pages, rendered pages, extracted archives).</summary>
     private bool IsOwnResult(string path)
     {
+        var full = Path.GetFullPath(path);
         lock (_ownResults)
         {
             foreach (var old in _ownResults.Where(kv => DateTime.UtcNow - kv.Value > RememberResults).Select(kv => kv.Key).ToList())
                 _ownResults.Remove(old);
-            return _ownResults.ContainsKey(Path.GetFullPath(path));
+            return _ownResults.Keys.Any(own => string.Equals(own, full, StringComparison.OrdinalIgnoreCase)
+                || full.StartsWith(Path.TrimEndingDirectorySeparator(own) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
         }
     }
 
@@ -187,7 +216,12 @@ internal sealed class FolderWatcher : IDisposable
         foreach (var watcher in _watchers)
             watcher.Dispose();
         _watchers.Clear();
+        _watched.Clear();
     }
 
-    public void Dispose() => StopAll();
+    public void Dispose()
+    {
+        _retry.Stop();
+        StopAll();
+    }
 }

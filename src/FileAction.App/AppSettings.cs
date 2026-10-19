@@ -64,6 +64,12 @@ public sealed class AppSettings
 
     public bool CheckForUpdates { get; set; } = true;
 
+    /// <summary>
+    /// PDF → DOCX through Microsoft Word (better tables and layout). Off by default: Word's PDF import can hang
+    /// when it runs hidden, and then the built-in conversion takes over only after a timeout.
+    /// </summary>
+    public bool UseWordForPdf { get; set; }
+
     /// <summary>Slices the user put together (e.g. "JPG 70 %"); they appear on the wheels like the built-in ones.</summary>
     public List<Preset> Presets { get; set; } = [];
 

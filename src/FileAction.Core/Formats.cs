@@ -76,7 +76,9 @@ public static class Formats
             if (name.EndsWith(d, StringComparison.OrdinalIgnoreCase) && name.Length > d.Length)
                 return name[..^d.Length];
         }
-        return Path.GetFileNameWithoutExtension(name);
+        var stem = Path.GetFileNameWithoutExtension(name);
+        // ".bashrc" is all extension; keep "bashrc" rather than an empty name (outputs would be ".txt").
+        return stem.Length > 0 ? stem : name.TrimStart('.');
     }
 
     /// <summary>Upper-case display label: "jpg" → "JPG", "tar.gz" → "TAR.GZ".</summary>

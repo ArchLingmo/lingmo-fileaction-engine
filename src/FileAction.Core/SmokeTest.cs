@@ -33,7 +33,8 @@ public static class SmokeTest
         }
 
         var png = Path.Combine(dir, "smoke.png");
-        using (var image = new MagickImage(MagickColors.Orange, 64, 48))
+        // Photo-like content: a flat colour can't be compressed any further, and Compress rightly refuses.
+        using (var image = new MagickImage("plasma:", 640, 480))
             image.Write(png);
         var jpg = Run("image.to.jpg", png);
         Run("image.to.webp", png);

@@ -11,6 +11,12 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
 {
     private JobsWindow? _window;
 
+    /// <summary>
+    /// At most two jobs run at once; the rest wait their turn (a watched folder receiving 200 videos must not
+    /// start 200 FFmpeg processes, each using every core).
+    /// </summary>
+    private static readonly SemaphoreSlim Slots = new(2);
+
     /// <summary>Files a job created (watched folders use it to skip their own results).</summary>
     public event Action<IReadOnlyList<string>>? Produced;
 
@@ -78,8 +84,16 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
             Settings = settings.Quality,
         };
 
+        var slot = false;
         try
         {
+            if (!Slots.Wait(0))
+            {
+                card.Waiting();
+                await Slots.WaitAsync(cts.Token);
+                card.Report(0);
+            }
+            slot = true;
             var result = await Task.Run(() => op.ExecuteAsync(items, context));
             Produced?.Invoke(result.Outputs);
             card.Complete(result.Outputs, result.Message, result.Note);
@@ -90,9 +104,19 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
         {
             card.Cancelled();
         }
+        catch (ConversionException ex) when (ex.NothingToDo)
+        {
+            // "Already small enough", "already 720p": a neutral note, not a red error.
+            card.Complete([], null, ex.Message);
+        }
         catch (Exception ex)
         {
             card.Fail(Friendly(ex));
+        }
+        finally
+        {
+            if (slot)
+                Slots.Release();
         }
     }
 

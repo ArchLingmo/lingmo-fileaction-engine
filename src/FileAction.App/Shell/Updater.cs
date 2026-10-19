@@ -18,7 +18,7 @@ internal sealed class Updater
 {
     private static readonly HttpClient Http = CreateHttp();
     private DispatcherTimer? _timer;
-    private bool _announced;
+    private Version? _announced;
 
     public static Version Current => UpdateInfo.Normalize(typeof(Updater).Assembly.GetName().Version ?? new Version(0, 0, 0));
 
@@ -62,9 +62,10 @@ internal sealed class Updater
             _timer.Interval = TimeSpan.FromHours(6);
             if (!settings.CheckForUpdates || Installing)
                 return;
-            if (await CheckAsync() is { } update && !_announced)
+            // Announce each new version once (a later release is announced again).
+            if (await CheckAsync() is { } update && _announced != update.Version)
             {
-                _announced = true;
+                _announced = update.Version;
                 found(update);
             }
         };
@@ -87,17 +88,21 @@ internal sealed class Updater
         try
         {
             Notifications.Show(T("Stahuji aktualizaci…", "Downloading the update…"), $"FileAction {update.Version}");
-            using (var response = await Http.GetAsync(update.InstallerUrl, HttpCompletionOption.ResponseHeadersRead))
+            // Never run an installer that can't be checked.
+            var expected = update.InstallerSha256 ?? throw new InvalidOperationException(
+                T("U vydání chybí kontrolní otisk, aktualizaci stáhněte ručně z webu.", "The release has no checksum; download the update from the website."));
+            // The whole download, body included, must finish in time (HttpClient's timeout only covers the headers here).
+            using (var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(15)))
+            using (var response = await Http.GetAsync(update.InstallerUrl, HttpCompletionOption.ResponseHeadersRead, timeout.Token))
             {
                 response.EnsureSuccessStatusCode();
-                await using var input = await response.Content.ReadAsStreamAsync();
+                await using var input = await response.Content.ReadAsStreamAsync(timeout.Token);
                 await using var output = File.Create(target);
-                await input.CopyToAsync(output);
+                await input.CopyToAsync(output, timeout.Token);
             }
 
-            if (update.InstallerSha256 is { } expected)
+            await using (var file = File.OpenRead(target))
             {
-                await using var file = File.OpenRead(target);
                 var actual = Convert.ToHexString(await SHA256.HashDataAsync(file)).ToLowerInvariant();
                 if (actual != expected)
                     throw new InvalidOperationException(T("Stažený instalátor nesouhlasí s otiskem z GitHubu.", "The downloaded installer doesn't match the checksum published on GitHub."));

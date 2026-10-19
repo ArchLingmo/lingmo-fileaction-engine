@@ -16,6 +16,18 @@ public static partial class SubtitleBackend
     [GeneratedRegex(@"<[^>]+>")]
     private static partial Regex TagRegex();
 
+    /// <summary>WebVTT-only markup: voice, class, language, ruby and karaoke timestamps (SRT players show them as text).</summary>
+    [GeneratedRegex(@"</?(?:v|c|lang|ruby|rt)(?:[.\s][^>]*)?>|<\d{1,2}:\d{2}(?::\d{2})?\.\d{3}>")]
+    private static partial Regex VttOnlyTagRegex();
+
+    /// <summary>SRT-only markup that WebVTT doesn't know: ASS position codes and font tags.</summary>
+    [GeneratedRegex(@"\{\\[^}]*\}|</?font[^>]*>")]
+    private static partial Regex SrtOnlyTagRegex();
+
+    /// <summary>The tags both formats share.</summary>
+    [GeneratedRegex(@"^</?(?:b|i|u)>$")]
+    private static partial Regex SharedTagRegex();
+
     public static List<Cue> Parse(string text)
     {
         var cues = new List<Cue>();
@@ -38,8 +50,11 @@ public static partial class SubtitleBackend
         var parts = value.Replace(',', '.').Split(':');
         var hours = parts.Length == 3 ? int.Parse(parts[0], CultureInfo.InvariantCulture) : 0;
         var minutes = int.Parse(parts[^2], CultureInfo.InvariantCulture);
-        var seconds = double.Parse(parts[^1], CultureInfo.InvariantCulture);
-        return new TimeSpan(hours, minutes, 0) + TimeSpan.FromSeconds(seconds);
+        // Whole milliseconds: going through a double turns 02,010 into 02.009.
+        var secondParts = parts[^1].Split('.');
+        var seconds = int.Parse(secondParts[0], CultureInfo.InvariantCulture);
+        var millis = secondParts.Length > 1 ? int.Parse(secondParts[1].PadRight(3, '0')[..3], CultureInfo.InvariantCulture) : 0;
+        return new TimeSpan(0, hours, minutes, seconds, millis);
     }
 
     private static string Stamp(TimeSpan t, char separator) =>
@@ -54,7 +69,7 @@ public static partial class SubtitleBackend
         {
             sb.Append(n++).Append('\n')
               .Append(Stamp(c.Start, ',')).Append(" --> ").Append(Stamp(c.End, ',')).Append('\n')
-              .Append(c.Text).Append("\n\n");
+              .Append(VttToSrtText(c.Text)).Append("\n\n");
         }
         return sb.ToString();
     }
@@ -65,7 +80,7 @@ public static partial class SubtitleBackend
         foreach (var c in cues)
         {
             sb.Append(Stamp(c.Start, '.')).Append(" --> ").Append(Stamp(c.End, '.')).Append('\n')
-              .Append(c.Text).Append("\n\n");
+              .Append(SrtToVttText(c.Text)).Append("\n\n");
         }
         return sb.ToString();
     }
@@ -76,7 +91,7 @@ public static partial class SubtitleBackend
         string? previous = null;
         foreach (var c in cues)
         {
-            var line = TagRegex().Replace(c.Text, "").Replace('\n', ' ').Trim();
+            var line = System.Net.WebUtility.HtmlDecode(TagRegex().Replace(SrtOnlyTagRegex().Replace(c.Text, ""), "")).Replace('\n', ' ').Trim();
             if (line.Length == 0 || line == previous)
                 continue;
             sb.Append(line).Append('\n');
@@ -85,10 +100,49 @@ public static partial class SubtitleBackend
         return sb.ToString();
     }
 
+    /// <summary>Text of a cue for SRT: WebVTT-only tags removed, entities (&amp;amp; &amp;lt;) turned back into characters.</summary>
+    public static string VttToSrtText(string text)
+    {
+        var clean = VttOnlyTagRegex().Replace(text, "");
+        var sb = new StringBuilder();
+        var last = 0;
+        foreach (Match tag in TagRegex().Matches(clean))
+        {
+            sb.Append(System.Net.WebUtility.HtmlDecode(clean[last..tag.Index])).Append(tag.Value);
+            last = tag.Index + tag.Length;
+        }
+        sb.Append(System.Net.WebUtility.HtmlDecode(clean[last..]));
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Text of a cue for WebVTT: SRT-only codes removed, and '&amp;' and '&lt;' escaped unless they start a tag
+    /// both formats share (otherwise a browser would read "&lt;3" as a tag and hide the rest of the line).
+    /// </summary>
+    public static string SrtToVttText(string text)
+    {
+        var clean = SrtOnlyTagRegex().Replace(text, "");
+        var sb = new StringBuilder();
+        var last = 0;
+        foreach (Match tag in TagRegex().Matches(clean))
+        {
+            sb.Append(EscapeVtt(clean[last..tag.Index]));
+            sb.Append(SharedTagRegex().IsMatch(tag.Value) ? tag.Value : EscapeVtt(tag.Value));
+            last = tag.Index + tag.Length;
+        }
+        sb.Append(EscapeVtt(clean[last..]));
+        return sb.ToString();
+    }
+
+    private static string EscapeVtt(string text) =>
+        System.Net.WebUtility.HtmlDecode(text).Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
     public static Task<string> ConvertAsync(FileItem item, string format, OperationContext ctx) =>
         OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), item.BaseName, format, async tmp =>
         {
-            var cues = Parse(await File.ReadAllTextAsync(item.Path, ctx.CancellationToken).ConfigureAwait(false));
+            // Older Czech subtitles are Windows-1250; reading them as UTF-8 would destroy the diacritics.
+            var bytes = await File.ReadAllBytesAsync(item.Path, ctx.CancellationToken).ConfigureAwait(false);
+            var cues = Parse(SpreadsheetBackend.DetectEncoding(bytes).GetString(bytes));
             if (cues.Count == 0)
                 throw new ConversionException(T("V souboru nejsou žádné titulky.", "The file contains no subtitles."));
             var text = format switch

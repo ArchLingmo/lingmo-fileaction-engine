@@ -6,20 +6,95 @@ namespace FileAction.Core.Backends;
 /// <summary>Image conversions and edits through Magick.NET (ImageMagick, runs in-process).</summary>
 public static class ImageBackend
 {
-    private static MagickImage Load(string path)
+    private static MagickReadSettings ReadSettings(string path, bool allFrames)
     {
         var settings = new MagickReadSettings();
         if (Formats.KeyOf(path) == "svg")
         {
+            settings.Format = MagickFormat.Svg;
             settings.Density = new Density(192);
             settings.BackgroundColor = MagickColors.Transparent;
         }
-        // Only the first frame for animated GIF/WebP/multi-page TIFF.
-        settings.FrameIndex = 0;
-        settings.FrameCount = 1;
-        var image = new MagickImage(path, settings);
-        image.AutoOrient();
+        if (!allFrames)
+        {
+            // Only the first frame for animated GIF/WebP/multi-page TIFF.
+            settings.FrameIndex = 0;
+            settings.FrameCount = 1;
+        }
+        return settings;
+    }
+
+    private static MagickImage Load(string path)
+    {
+        // Through a stream: ImageMagick's own file access fails on paths longer than 260 characters.
+        MagickImage image;
+        using (var stream = File.OpenRead(path))
+            image = new MagickImage(stream, ReadSettings(path, allFrames: false));
+        if (Formats.KeyOf(path) == "svg" && Math.Max(image.Width, image.Height) < 512)
+        {
+            // An SVG with only a viewBox comes out tiny (20×20); render it again so the long side is ~1024 px.
+            var scale = 1024.0 / Math.Max(1, Math.Max(image.Width, image.Height));
+            image.Dispose();
+            var settings = ReadSettings(path, allFrames: false);
+            settings.Density = new Density(Math.Min(192 * scale, 4800));
+            using var again = File.OpenRead(path);
+            image = new MagickImage(again, settings);
+        }
+        Normalize(image);
         return image;
+    }
+
+    /// <summary>Upright, and in sRGB: CMYK and wide-gamut images would otherwise show wrong colours.</summary>
+    private static void Normalize(MagickImage image)
+    {
+        image.AutoOrient();
+        if (image.ColorSpace == ColorSpace.CMYK)
+        {
+            if (image.GetColorProfile() is null)
+                image.TransformColorSpace(ColorProfiles.USWebCoatedSWOP, ColorProfiles.SRGB);
+            else
+                image.TransformColorSpace(ColorProfiles.SRGB);
+        }
+    }
+
+    /// <summary>True for a GIF/WebP with more than one frame.</summary>
+    public static bool IsAnimated(string path)
+    {
+        if (Formats.KeyOf(path) is not ("gif" or "webp"))
+            return false;
+        using var stream = File.OpenRead(path);
+        using var frames = new MagickImageCollection(stream, ReadSettings(path, allFrames: true));
+        return frames.Count > 1;
+    }
+
+    private static MagickImageCollection LoadFrames(string path)
+    {
+        using var stream = File.OpenRead(path);
+        var frames = new MagickImageCollection(stream, ReadSettings(path, allFrames: true));
+        frames.Coalesce();
+        return frames;
+    }
+
+    private static void Save(IMagickImage<byte> image, string output, MagickFormat format)
+    {
+        using var stream = File.Create(output);
+        image.Write(stream, format);
+    }
+
+    private static void Save(MagickImageCollection images, string output, MagickFormat format)
+    {
+        using var stream = File.Create(output);
+        images.Write(stream, format);
+    }
+
+    /// <summary>Animated output: GIF frames are re-optimised (only the changing parts are stored).</summary>
+    private static void SaveFrames(MagickImageCollection frames, string output, string format, int quality)
+    {
+        foreach (var frame in frames)
+            frame.Quality = (uint)Math.Clamp(quality, 1, 100);
+        if (format == "gif")
+            frames.Optimize();
+        Save(frames, output, ToMagickFormat(format));
     }
 
     public static MagickFormat ToMagickFormat(string format) => format switch
@@ -45,47 +120,115 @@ public static class ImageBackend
             image.BackgroundColor = MagickColors.White;
             image.Alpha(AlphaAction.Remove);
         }
-        if (format == "ico" && (image.Width > 256 || image.Height > 256))
-            image.Resize(new MagickGeometry(256, 256));
         if (format == "ico")
-            image.Settings.SetDefine(MagickFormat.Ico, "auto-resize", "256,128,64,48,32,16");
+        {
+            // Icons are square: pad instead of stretching, and never blow a small picture up.
+            var side = Math.Max(image.Width, image.Height);
+            if (image.Width != image.Height)
+            {
+                image.BackgroundColor = MagickColors.Transparent;
+                image.Extent(side, side, Gravity.Center);
+            }
+            if (side > 256)
+                image.Resize(new MagickGeometry(256, 256));
+            var sizes = new uint[] { 256, 128, 64, 48, 32, 16 }.Where(s => s <= Math.Max(16, Math.Min(side, 256u)));
+            image.Settings.SetDefine(MagickFormat.Ico, "auto-resize", string.Join(",", sizes));
+        }
+        if (format == "pdf")
+        {
+            // Page size follows the pixel density: fit the long side to an A4 page (29.7 cm) instead of
+            // 72 DPI, which made a phone photo a page over a metre wide.
+            var dpi = Math.Max(72, Math.Max(image.Width, image.Height) / 11.69);
+            image.Density = new Density(dpi, dpi, DensityUnit.PixelsPerInch);
+        }
+        if (format == "tiff")
+            image.Settings.Compression = CompressionMethod.LZW;
     }
+
+    /// <summary>The JPEG quality to re-save with: never higher than the source had (that only makes the file bigger).</summary>
+    private static int QualityFor(MagickImage image, string format, int wanted) =>
+        format == "jpg" && image.Format == MagickFormat.Jpeg && image.Quality is > 0 and < 100 ? Math.Min(wanted, (int)image.Quality) : wanted;
 
     public static Task ConvertAsync(string input, string output, string format, Settings settings, CancellationToken ct) =>
         Task.Run(() =>
         {
+            // GIF ↔ WebP keeps the animation.
+            if (format is "gif" or "webp" && IsAnimated(input))
+            {
+                using var frames = LoadFrames(input);
+                ct.ThrowIfCancellationRequested();
+                SaveFrames(frames, output, format, settings.JpegQuality);
+                return;
+            }
             using var image = Load(input);
             ct.ThrowIfCancellationRequested();
-            PrepareFor(image, format, settings.JpegQuality);
-            image.Write(output, ToMagickFormat(format));
+            PrepareFor(image, format, QualityFor(image, format, settings.JpegQuality));
+            Save(image, output, ToMagickFormat(format));
         }, ct);
 
-    /// <summary>Applies <paramref name="edit"/> and saves in the source format.</summary>
+    /// <summary>Applies <paramref name="edit"/> and saves in the source format (every frame of an animation).</summary>
     public static Task EditAsync(string input, string output, Action<MagickImage> edit, int? quality, CancellationToken ct) =>
         Task.Run(() =>
         {
-            using var image = Load(input);
             var format = OutputFormatFor(Formats.KeyOf(input));
+            if (IsAnimated(input))
+            {
+                using var frames = LoadFrames(input);
+                foreach (var frame in frames)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    edit((MagickImage)frame);
+                    frame.ResetPage();
+                }
+                SaveFrames(frames, output, format, quality ?? 92);
+                return;
+            }
+            using var image = Load(input);
+            var q = QualityFor(image, format, quality ?? 92);
             edit(image);
             ct.ThrowIfCancellationRequested();
-            PrepareFor(image, format, quality ?? 92);
-            image.Write(output, ToMagickFormat(format));
+            PrepareFor(image, format, q);
+            Save(image, output, ToMagickFormat(format));
         }, ct);
 
-    /// <summary>Formats we can read but not write (SVG) are saved as PNG.</summary>
+    /// <summary>
+    /// Formats we can read but not write are saved as something close: SVG as PNG, HEIC (no encoder in this
+    /// ImageMagick build) as JPG.
+    /// </summary>
     public static string OutputFormatFor(string inputFormat) => inputFormat switch
     {
         "svg" => "png",
+        "heic" => "jpg",
         _ => inputFormat,
     };
+
+    /// <summary>
+    /// Removes EXIF, GPS, XMP and comments. The colour profile is not simply dropped (that shifts the colours
+    /// of Adobe RGB or P3 photos): the pixels are converted to sRGB first, which needs no profile.
+    /// </summary>
+    public static void StripMetadata(MagickImage image)
+    {
+        if (image.GetColorProfile() is { } profile && !profile.Description?.Contains("sRGB", StringComparison.OrdinalIgnoreCase) == true)
+            image.TransformColorSpace(ColorProfiles.SRGB);
+        image.Strip();
+    }
 
     public static Task CompressAsync(string input, string output, int quality, CancellationToken ct) =>
         Task.Run(() =>
         {
-            using var image = Load(input);
             var format = OutputFormatFor(Formats.KeyOf(input));
-            image.Strip();
-            image.Quality = (uint)Math.Clamp(quality, 1, 100);
+            if (IsAnimated(input))
+            {
+                using var frames = LoadFrames(input);
+                foreach (var frame in frames)
+                    StripMetadata((MagickImage)frame);
+                SaveFrames(frames, output, format, quality);
+                return;
+            }
+            using var image = Load(input);
+            var q = QualityFor(image, format, quality);
+            StripMetadata(image);
+            image.Quality = (uint)Math.Clamp(q, 1, 100);
             if (format == "png")
             {
                 // Lossy palette reduction gives the biggest win for PNG.
@@ -98,8 +241,8 @@ public static class ImageBackend
                 image.Settings.SetDefine(MagickFormat.Jpeg, "sampling-factor", "4:2:0");
                 image.Settings.Interlace = Interlace.Jpeg;
             }
-            PrepareFor(image, format, quality);
-            image.Write(output, ToMagickFormat(format));
+            PrepareFor(image, format, q);
+            Save(image, output, ToMagickFormat(format));
         }, ct);
 
     /// <summary>A user preset: optional resize, grayscale and metadata removal, saved in <paramref name="format"/>.</summary>
@@ -107,18 +250,36 @@ public static class ImageBackend
         bool grayscale, bool strip, CancellationToken ct) =>
         Task.Run(() =>
         {
+            void Apply(MagickImage image)
+            {
+                if (maxSide is > 0)
+                    ResizeMax(image, (uint)maxSide.Value);
+                else if (percent is > 0 and < 100)
+                    ResizePercent(image, percent.Value);
+                if (grayscale)
+                    Grayscale(image);
+                if (strip)
+                    StripMetadata(image);
+            }
+
+            if (format is "gif" or "webp" && IsAnimated(input))
+            {
+                using var frames = LoadFrames(input);
+                foreach (var frame in frames)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    Apply((MagickImage)frame);
+                    frame.ResetPage();
+                }
+                SaveFrames(frames, output, format, quality);
+                return;
+            }
             using var image = Load(input);
-            if (maxSide is > 0)
-                ResizeMax(image, (uint)maxSide.Value);
-            else if (percent is > 0 and < 100)
-                ResizePercent(image, percent.Value);
-            if (grayscale)
-                Grayscale(image);
-            if (strip)
-                image.Strip();
+            var q = QualityFor(image, format, quality);
+            Apply(image);
             ct.ThrowIfCancellationRequested();
-            PrepareFor(image, format, quality);
-            image.Write(output, ToMagickFormat(format));
+            PrepareFor(image, format, q);
+            Save(image, output, ToMagickFormat(format));
         }, ct);
 
     public static Task ImagesToPdfAsync(IReadOnlyList<string> inputs, string output, int quality, CancellationToken ct) =>
@@ -132,7 +293,7 @@ public static class ImageBackend
                 PrepareFor(image, "pdf", quality);
                 collection.Add(image);
             }
-            collection.Write(output, MagickFormat.Pdf);
+            Save(collection, output, MagickFormat.Pdf);
         }, ct);
 
     public static void ResizePercent(MagickImage image, double percent) =>
@@ -145,6 +306,16 @@ public static class ImageBackend
         image.Resize(new MagickGeometry(maxSide, maxSide));
     }
 
+    /// <summary>True when <see cref="ResizeMax"/> would leave the image as it is.</summary>
+    public static bool FitsWithin(string path, uint maxSide)
+    {
+        var info = new MagickImageInfo();
+        using (var stream = File.OpenRead(path))
+            info.Read(stream);
+        // EXIF rotation swaps the sides, but "fits" is the same either way.
+        return info.Width <= maxSide && info.Height <= maxSide;
+    }
+
     public static void CropSquare(MagickImage image)
     {
         var side = Math.Min(image.Width, image.Height);
@@ -152,5 +323,6 @@ public static class ImageBackend
         image.ResetPage();
     }
 
-    public static void Grayscale(MagickImage image) => image.Grayscale(PixelIntensityMethod.Rec709Luminance);
+    /// <summary>Perceptual grey (the gamma-encoded luma), not linear light, which came out half as bright.</summary>
+    public static void Grayscale(MagickImage image) => image.Grayscale(PixelIntensityMethod.Rec709Luma);
 }

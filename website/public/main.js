@@ -74,7 +74,7 @@
       const slim = { tag_name: release.tag_name, assets: (release.assets || []).map(a => ({ name: a.name, size: a.size, browser_download_url: a.browser_download_url })) };
       try { sessionStorage.setItem(cacheKey, JSON.stringify(slim)); } catch { /* ignore */ }
       applyRelease(slim);
-    } catch { /* offline or rate-limited: the links in the page point at v1.4.0 */ }
+    } catch { /* offline or rate-limited: the links in the page point at the release written into it */ }
   }
 
   // ---------- Reveal on scroll ----------
