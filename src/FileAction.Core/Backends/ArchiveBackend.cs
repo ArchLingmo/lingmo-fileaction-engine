@@ -45,13 +45,13 @@ public static class ArchiveBackend
     /// Extracts next to the archive. When the archive holds exactly one top-level item it is placed
     /// directly in <paramref name="destinationDir"/>; otherwise everything goes into a folder named after the archive.
     /// </summary>
-    public static async Task<string> ExtractAsync(string archive, string destinationDir, CancellationToken ct)
+    public static async Task<string> ExtractAsync(string archive, string destinationDir, CancellationToken ct, IProgress<double>? progress = null)
     {
         var temp = Path.Combine(destinationDir, $".fa-{Guid.NewGuid().ToString("N")[..8]}.part");
         Directory.CreateDirectory(temp);
         try
         {
-            await Task.Run(() => ExtractAll(archive, temp, ct), ct).ConfigureAwait(false);
+            await Task.Run(() => ExtractAll(archive, temp, ct, progress), ct).ConfigureAwait(false);
 
             var entries = Directory.GetFileSystemEntries(temp);
             if (entries.Length == 0)
@@ -77,18 +77,27 @@ public static class ArchiveBackend
     }
 
     /// <summary>Everything in the archive into <paramref name="destination"/>; a .tar inside a .gz/.bz2/.xz is unpacked too.</summary>
-    private static void ExtractAll(string archive, string destination, CancellationToken ct)
+    private static void ExtractAll(string archive, string destination, CancellationToken ct, IProgress<double>? progress = null, double from = 0, double to = 1)
     {
-        ExtractTo(archive, destination, ct);
-        if (!Wrappers.Contains(Formats.KeyOf(archive)))
+        // A .tar.gz is unpacked in two passes (gzip, then tar): the first gets 60 % of the bar.
+        var key = Formats.KeyOf(archive);
+        var wrapper = Wrappers.Contains(key);
+        // .tar.gz is usually read in one pass; only a bare .gz/.bz2/.xz that turns out to hold a .tar needs two.
+        var split = wrapper && !key.StartsWith("tar.", StringComparison.Ordinal) ? from + (to - from) * 0.6 : to;
+        ExtractTo(archive, destination, ct, progress, from, split);
+        if (!wrapper)
             return;
         var only = Directory.GetFileSystemEntries(destination);
         if (only.Length != 1 || !File.Exists(only[0]) || Formats.KeyOf(only[0]) != "tar")
+        {
+            // Read in one pass after all (SharpCompress unpacks .tar.gz directly): the bar is complete.
+            progress?.Report(to);
             return;
+        }
         var inner = only[0];
         var innerDir = Path.Combine(destination, ".inner");
         Directory.CreateDirectory(innerDir);
-        ExtractTo(inner, innerDir, ct);
+        ExtractTo(inner, innerDir, ct, progress, split, to);
         File.Delete(inner);
         foreach (var e in Directory.GetFileSystemEntries(innerDir))
             MoveEntry(e, Path.Combine(destination, Path.GetFileName(e)));
@@ -103,14 +112,20 @@ public static class ArchiveBackend
             File.Move(from, to);
     }
 
-    private static void ExtractTo(string archive, string destination, CancellationToken ct)
+    private static void ExtractTo(string archive, string destination, CancellationToken ct, IProgress<double>? progress = null, double from = 0, double to = 1)
     {
         var fullDestination = Path.TrimEndingDirectorySeparator(Path.GetFullPath(destination)) + Path.DirectorySeparatorChar;
+        var total = new FileInfo(archive).Length;
         try
         {
             if (Formats.KeyOf(archive) == "7z")
             {
-                using var a = ArchiveFactory.OpenArchive(archive, Reader());
+                // 7z jumps around in the file: progress follows the read position.
+                var bar = new ByteProgress(total, progress, from, to);
+                Stream? file = null;
+                file = new ProgressStream(File.OpenRead(archive), _ => bar.Set(file!.Position), ct);
+                using var counted = file;
+                using var a = ArchiveFactory.OpenArchive(counted, Reader());
                 foreach (var entry in a.Entries)
                 {
                     ct.ThrowIfCancellationRequested();
@@ -128,7 +143,8 @@ public static class ArchiveBackend
                 return;
             }
 
-            using var stream = File.OpenRead(archive);
+            var progressBar = new ByteProgress(total, progress, from, to);
+            using var stream = new ProgressStream(File.OpenRead(archive), progressBar.Add, ct);
             using var reader = ReaderFactory.OpenReader(stream, Reader());
             while (reader.MoveToNextEntry())
             {
@@ -199,7 +215,8 @@ public static class ArchiveBackend
     }
 
     /// <summary>Packs files and folders into one archive ("zip", "tar" or "tar.gz"), empty folders included.</summary>
-    public static async Task PackAsync(IReadOnlyList<string> items, string output, string format, CancellationToken ct)
+    public static async Task PackAsync(IReadOnlyList<string> items, string output, string format, CancellationToken ct,
+        IProgress<double>? progress = null, double from = 0, double to = 1)
     {
         var entries = new List<(string Source, string Name)>();
         foreach (var item in items)
@@ -226,6 +243,8 @@ public static class ArchiveBackend
             }
         }
 
+        var total = entries.Where(e => !e.Name.EndsWith('/')).Sum(e => new FileInfo(e.Source).Length);
+        var bar = new ByteProgress(total, progress, from, to);
         await Task.Run(async () =>
         {
             await using var file = File.Create(output);
@@ -236,9 +255,16 @@ public static class ArchiveBackend
                 {
                     ct.ThrowIfCancellationRequested();
                     if (name.EndsWith('/'))
+                    {
                         zip.CreateEntry(name);
-                    else
-                        zip.CreateEntryFromFile(source, name, CompressionLevel.Optimal);
+                        continue;
+                    }
+                    // Copied through a counting stream: progress and Cancel work inside a large file too.
+                    var entry = zip.CreateEntry(name, CompressionLevel.Optimal);
+                    entry.LastWriteTime = File.GetLastWriteTime(source);
+                    await using var input = new ProgressStream(File.OpenRead(source), bar.Add, ct);
+                    await using var entryStream = entry.Open();
+                    await input.CopyToAsync(entryStream, 1 << 20, ct).ConfigureAwait(false);
                 }
                 return;
             }
@@ -258,7 +284,7 @@ public static class ArchiveBackend
                             .ConfigureAwait(false);
                         continue;
                     }
-                    await using var data = File.OpenRead(source);
+                    await using var data = new ProgressStream(File.OpenRead(source), bar.Add, ct);
                     var entry = new PaxTarEntry(TarEntryType.RegularFile, name)
                     {
                         DataStream = data,
@@ -285,12 +311,12 @@ public static class ArchiveBackend
         var temp = OutputPaths.TempDirectory();
         try
         {
-            await Task.Run(() => ExtractAll(item.Path, temp, ctx.CancellationToken), ctx.CancellationToken).ConfigureAwait(false);
+            await Task.Run(() => ExtractAll(item.Path, temp, ctx.CancellationToken, ctx.Progress, 0, 0.5), ctx.CancellationToken).ConfigureAwait(false);
             var contents = Directory.GetFileSystemEntries(temp);
             if (contents.Length == 0)
                 throw new ConversionException(T("Archiv je prázdný.", "The archive is empty."));
             return await OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), item.BaseName, format, tmp =>
-                PackAsync(contents, tmp, format, ctx.CancellationToken)).ConfigureAwait(false);
+                PackAsync(contents, tmp, format, ctx.CancellationToken, ctx.Progress, 0.5, 1)).ConfigureAwait(false);
         }
         finally
         {

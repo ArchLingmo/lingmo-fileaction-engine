@@ -488,7 +488,7 @@ public static class Catalog
     private static void AddArchives(List<Operation> ops)
     {
         ops.Add(new PerFileOperation("archive.extract", WheelKind.Convert, T("Rozbalit", "Extract"), Glyphs.Extract, Formats.Archives,
-            async (item, ctx, _) => [await ArchiveBackend.ExtractAsync(item.Path, ctx.OutputDirFor(item.Path), ctx.CancellationToken)]));
+            async (item, ctx, p) => [await ArchiveBackend.ExtractAsync(item.Path, ctx.OutputDirFor(item.Path), ctx.CancellationToken, p)]));
         foreach (var target in Formats.ArchiveOutputs)
         {
             ops.Add(new PerFileOperation($"archive.to.{target}", WheelKind.Convert, Formats.Display(target), Glyphs.Pack, Formats.Archives,
@@ -499,7 +499,7 @@ public static class Catalog
         {
             ops.Add(new BatchOperation($"pack.{target}", WheelKind.Tools, T("Zabalit", "Archive"), Glyphs.Pack, _ => true,
                 async (items, ctx) => [await OutputPaths.ProduceAsync(ctx.OutputDirFor(items[0].Path), ArchiveBackend.ArchiveNameFor(items), target,
-                    tmp => ArchiveBackend.PackAsync(items.Select(i => i.Path).ToList(), tmp, target, ctx.CancellationToken))],
+                    tmp => ArchiveBackend.PackAsync(items.Select(i => i.Path).ToList(), tmp, target, ctx.CancellationToken, ctx.Progress))],
                 subtitle: label));
         }
     }

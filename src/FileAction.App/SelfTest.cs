@@ -37,7 +37,7 @@ internal static class SelfTest
 
             log.AddRange(SmokeTest.Run(Path.Combine(outDir, "smoke")));
             // Saved after every step, so a hard crash (which skips the catch below) still shows where it stopped.
-            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestWatchFolder(outDir, log), () => TestWheelDrag(outDir, log), () => TestOcr(outDir, log), () => TestUpdateCheck(log) })
+            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestWatchFolder(outDir, log), () => TestWheelDrag(outDir, log), () => TestColdStartForwarding(log), () => TestOcr(outDir, log), () => TestUpdateCheck(log) })
             {
                 File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
                 step();
@@ -342,6 +342,28 @@ internal static class SelfTest
         {
             window.Close();
         }
+    }
+
+    /// <summary>
+    /// Explorer's right-click on 12 files starts 12 processes at once, while the first copy is still starting:
+    /// every one must arrive, and none may wait for the app to be ready before connecting.
+    /// </summary>
+    private static void TestColdStartForwarding(List<string> log)
+    {
+        var id = "FileAction-selftest-" + Guid.NewGuid().ToString("N")[..8];
+        using var instance = Shell.SingleInstance.TryAcquire(id) ?? throw new InvalidOperationException("pipe name taken");
+        var senders = Enumerable.Range(1, 12)
+            .Select(i => Task.Run(() => Shell.SingleInstance.Forward(["--wheel", $@"C:ile{i}.txt"], TimeSpan.FromSeconds(10), id)))
+            .ToArray();
+        // The app is "still starting": nothing listens to the queue yet.
+        Thread.Sleep(1500);
+        var received = new List<string>();
+        instance.Listen(System.Windows.Threading.Dispatcher.CurrentDispatcher, args => received.AddRange(args.Skip(1)));
+        Task.WaitAll(senders, TimeSpan.FromSeconds(15));
+        Pump(() => received.Count >= 12, TimeSpan.FromSeconds(5));
+        Check(senders.All(t => t.Result), "every sender reached the running copy");
+        Check(received.Distinct().Count() == 12, $"all 12 files arrived (got {received.Count})");
+        log.Add("ok cold-start forwarding (12 files at once)");
     }
 
     /// <summary>Runs the dispatcher (async continuations, the watcher's callbacks) until done or timed out.</summary>

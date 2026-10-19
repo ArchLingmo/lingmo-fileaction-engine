@@ -150,3 +150,104 @@ public sealed class ArchiveQualityTests : IDisposable
     public void Zip_slip_is_still_blocked() =>
         Assert.Throws<ConversionException>(() => ArchiveBackend.SafeTarget(Path.GetTempPath(), "../../evil.exe"));
 }
+
+public sealed class ArchiveProgressTests : IDisposable
+{
+    private readonly string _dir = OutputPaths.TempDirectory();
+
+    public void Dispose() => OutputPaths.TryDelete(_dir);
+
+    private sealed class Recorder : IProgress<double>
+    {
+        public List<double> Values { get; } = [];
+        public void Report(double value)
+        {
+            lock (Values)
+                Values.Add(value);
+        }
+    }
+
+    private string BigFolder()
+    {
+        var folder = Path.Combine(_dir, "data");
+        Directory.CreateDirectory(folder);
+        var bytes = new byte[8 * 1024 * 1024];
+        new Random(1).NextBytes(bytes);
+        File.WriteAllBytes(Path.Combine(folder, "a.bin"), bytes);
+        File.WriteAllBytes(Path.Combine(folder, "b.bin"), bytes);
+        return folder;
+    }
+
+    [Theory]
+    [InlineData("zip")]
+    [InlineData("tar.gz")]
+    public async Task Pack_and_extract_report_progress(string format)
+    {
+        var folder = BigFolder();
+        var archive = Path.Combine(_dir, "data." + format);
+        var packing = new Recorder();
+        await ArchiveBackend.PackAsync([folder], archive, format, default, packing);
+        Assert.True(packing.Values.Count > 10, $"only {packing.Values.Count} progress reports");
+        Assert.Equal(1, packing.Values.Max(), 3);
+        Assert.Equal(packing.Values.OrderBy(v => v), packing.Values);
+
+        var extracting = new Recorder();
+        var result = await ArchiveBackend.ExtractAsync(archive, Path.Combine(_dir, "out"), default, extracting);
+        Assert.True(extracting.Values.Count > 5);
+        Assert.True(extracting.Values.Max() > 0.9);
+        Assert.Equal(16 * 1024 * 1024, Directory.GetFiles(result).Sum(f => new FileInfo(f).Length));
+    }
+
+    [Fact]
+    public async Task Cancel_stops_inside_a_large_file()
+    {
+        var folder = BigFolder();
+        using var cts = new CancellationTokenSource();
+        var progress = new Progress<double>();
+        var reports = 0;
+        var recorder = new CancelAfter(() => { if (++reports == 3) cts.Cancel(); });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            ArchiveBackend.PackAsync([folder], Path.Combine(_dir, "x.zip"), "zip", cts.Token, recorder));
+    }
+
+    private sealed class CancelAfter(Action onReport) : IProgress<double>
+    {
+        public void Report(double value) => onReport();
+    }
+}
+
+public sealed class PdfMergeTests : IDisposable
+{
+    private readonly string _dir = OutputPaths.TempDirectory();
+
+    public void Dispose() => OutputPaths.TryDelete(_dir);
+
+    private string Pdf(string name, int pages, string? bookmark)
+    {
+        using var doc = new PdfSharp.Pdf.PdfDocument();
+        for (var i = 0; i < pages; i++)
+            doc.AddPage();
+        if (bookmark is not null)
+            doc.Outlines.Add(bookmark, doc.Pages[pages - 1], true);
+        var path = Path.Combine(_dir, name);
+        doc.Save(path);
+        return path;
+    }
+
+    [Fact]
+    public void Merge_keeps_bookmarks_and_adds_one_per_file()
+    {
+        var first = Pdf("Smlouva.pdf", 2, "Podpisy");
+        var second = Pdf("Příloha.pdf", 1, null);
+        var merged = PdfBackend.Merge([first, second], Path.Combine(_dir, "merged.pdf"));
+        using var result = PdfSharp.Pdf.IO.PdfReader.Open(merged, PdfSharp.Pdf.IO.PdfDocumentOpenMode.Import);
+        Assert.Equal(3, result.PageCount);
+        var top = result.Outlines.Select(o => o.Title).ToList();
+        Assert.Equal(["Smlouva", "Příloha"], top);
+        var inner = Assert.Single(result.Outlines[0].Outlines);
+        Assert.Equal("Podpisy", inner.Title);
+        int Index(PdfSharp.Pdf.PdfPage page) => result.Pages.Cast<PdfSharp.Pdf.PdfPage>().ToList().FindIndex(p => p.Reference?.ObjectID == page.Reference?.ObjectID);
+        Assert.Equal(1, Index(inner.DestinationPage!));
+        Assert.Equal(2, Index(result.Outlines[1].DestinationPage!));
+    }
+}

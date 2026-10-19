@@ -188,17 +188,55 @@ public static class PdfBackend
         }
     }
 
+    /// <summary>
+    /// Joins the PDFs in order. Bookmarks survive: every file gets a bookmark with its name, holding the
+    /// bookmarks it had, so the merged document can still be navigated.
+    /// </summary>
     public static string Merge(IReadOnlyList<string> inputs, string output)
     {
         using var result = new PdfSharp.Pdf.PdfDocument();
         foreach (var input in inputs)
         {
             using var source = Open(input, PdfDocumentOpenMode.Import);
+            var added = new List<(PdfPage Source, PdfPage Copy)>();
             foreach (var page in source.Pages)
-                result.AddPage(page);
+                added.Add((page, result.AddPage(page)));
+            if (added.Count == 0)
+                continue;
+            var file = result.Outlines.Add(Formats.BaseNameOf(input), added[0].Copy, true);
+            try
+            {
+                CopyOutlines(source.Outlines, file.Outlines, added);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or PdfSharp.Pdf.IO.PdfReaderException)
+            {
+                // A damaged outline tree is not worth failing the merge; the file bookmark is still there.
+            }
         }
         result.Save(output);
         return output;
+    }
+
+    private static void CopyOutlines(PdfOutlineCollection from, PdfOutlineCollection to, List<(PdfPage Source, PdfPage Copy)> pages)
+    {
+        foreach (var outline in from)
+        {
+            var target = outline.DestinationPage is { } page ? FindCopy(page, pages) : null;
+            // Bookmarks that point nowhere (named destinations, links) still group their children.
+            var copy = to.Add(outline.Title, target ?? pages[0].Copy, outline.Opened);
+            if (outline.HasChildren)
+                CopyOutlines(outline.Outlines, copy.Outlines, pages);
+        }
+    }
+
+    private static PdfPage? FindCopy(PdfPage page, List<(PdfPage Source, PdfPage Copy)> pages)
+    {
+        foreach (var (source, copy) in pages)
+        {
+            if (ReferenceEquals(source, page) || (source.Reference is { } a && page.Reference is { } b && a.ObjectID == b.ObjectID))
+                return copy;
+        }
+        return null;
     }
 
     public static async Task<IEnumerable<string>> SplitAsync(FileItem item, OperationContext ctx, IProgress<double> progress)
