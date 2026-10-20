@@ -12,7 +12,7 @@ namespace FileAction.Core.Backends;
 /// <summary>
 /// Rebuilds the structure of a text PDF as Markdown for pandoc: headings (from font size), bold and
 /// italic (from the font), bulleted and numbered lists, paragraphs in reading order (columns too),
-/// pictures and page breaks. Tables come out as plain paragraphs; a PDF keeps no table structure.
+/// pictures, page breaks and tables (found by word alignment, see PdfStructure.Tables.cs).
 /// </summary>
 public static partial class PdfStructure
 {
@@ -77,8 +77,17 @@ public static partial class PdfStructure
     private static List<string> PageParts(Page page, double body, string? imageDir, ref int imageCount)
     {
         var words = page.GetWords(NearestNeighbourWordExtractor.Instance).Where(w => !string.IsNullOrWhiteSpace(w.Text)).ToList();
+        // Tables first: the block segmenter would read them column by column. Their words leave the page text.
+        var tables = FindTables(page, words);
+        if (tables.Count > 0)
+        {
+            var used = tables.SelectMany(t => t.Words).ToHashSet();
+            words = words.Where(w => !used.Contains(w)).ToList();
+        }
         var blocks = words.Count == 0 ? [] : UnsupervisedReadingOrderDetector.Instance.Get(DocstrumBoundingBoxes.Instance.GetBlocks(words))
             .OrderBy(b => b.ReadingOrder).ToList();
+        foreach (var table in tables)
+            SplitAround(blocks, table);
         // Bullets often sit apart from their text and end up as a block of their own; remember where they
         // are and give them back to the lines on the same baseline.
         var bullets = new List<(double Y, double X)>();
@@ -87,7 +96,16 @@ public static partial class PdfStructure
             bullets.AddRange(block.TextLines.SelectMany(l => l.Words).Select(w => (w.BoundingBox.Bottom, w.BoundingBox.Right)));
             blocks.Remove(block);
         }
-        var parts = blocks.Select(b => (Top: b.BoundingBox.Top, Text: RenderBlock(b, body, bullets))).Where(p => p.Text.Length > 0).ToList();
+        var parts = blocks.Select(b => (Top: b.BoundingBox.Top, b.BoundingBox.Left, b.BoundingBox.Right, Text: RenderBlock(b, body, bullets)))
+            .Where(p => p.Text.Length > 0).ToList();
+        foreach (var table in tables)
+        {
+            // Before the first block (in reading order) below the table, preferably one in the same column.
+            var index = parts.FindIndex(p => p.Top < table.Top && p.Right > table.Left && p.Left < table.Right);
+            if (index < 0)
+                index = parts.FindIndex(p => p.Top < table.Top);
+            parts.Insert(index < 0 ? parts.Count : index, (table.Top, table.Left, table.Right, table.Markdown));
+        }
 
         if (imageDir is not null)
         {
@@ -100,10 +118,31 @@ public static partial class PdfStructure
                 // Before the first block (in reading order) that starts below the picture's middle.
                 var middle = image.BoundingBox.Bottom + image.BoundingBox.Height / 2;
                 var index = parts.FindIndex(p => p.Top < middle);
-                parts.Insert(index < 0 ? parts.Count : index, (image.BoundingBox.Top, markdown));
+                parts.Insert(index < 0 ? parts.Count : index, (image.BoundingBox.Top, image.BoundingBox.Left, image.BoundingBox.Right, markdown));
             }
         }
         return parts.Select(p => p.Text).ToList();
+    }
+
+    /// <summary>
+    /// With the table's words gone, the paragraphs above and below it may close up into one block; such a
+    /// block is cut in two so the table can go between them.
+    /// </summary>
+    private static void SplitAround(List<TextBlock> blocks, PageTable table)
+    {
+        for (var i = 0; i < blocks.Count; i++)
+        {
+            var box = blocks[i].BoundingBox;
+            if (box.Top <= table.Top || box.Bottom >= table.Bottom || box.Right <= table.Left || box.Left >= table.Right)
+                continue;
+            var above = blocks[i].TextLines.Where(l => l.BoundingBox.Bottom >= table.Bottom).ToList();
+            var below = blocks[i].TextLines.Where(l => l.BoundingBox.Bottom < table.Bottom).ToList();
+            if (above.Count == 0 || below.Count == 0)
+                continue;
+            blocks[i] = new TextBlock(above);
+            blocks.Insert(i + 1, new TextBlock(below));
+            i++;
+        }
     }
 
     private static string? SaveImage(IPdfImage image, string dir, int number)
@@ -169,14 +208,16 @@ public static partial class PdfStructure
         return JoinLines(rendered.Select(l => l.Markdown));
     }
 
-    /// <summary>A line as Markdown with bold/italic spans, plus its plain text for list detection.</summary>
-    private static (string Markdown, string Plain) RenderLine(TextLine line)
+    private static (string Markdown, string Plain) RenderLine(TextLine line) => RenderWords(line.Words);
+
+    /// <summary>Words of a line (or of a table cell) as Markdown with bold/italic spans, plus their plain text for list detection.</summary>
+    private static (string Markdown, string Plain) RenderWords(IReadOnlyList<Word> words)
     {
         var sb = new StringBuilder();
-        var plain = FixSymbols(string.Join(" ", line.Words.Select(w => w.Text)));
+        var plain = FixSymbols(string.Join(" ", words.Select(w => w.Text)));
         // Group neighbouring words with the same style so markers wrap whole phrases.
         var runs = new List<(string Text, bool Bold, bool Italic)>();
-        foreach (var word in line.Words)
+        foreach (var word in words)
         {
             var visible = word.Letters.Where(l => !string.IsNullOrWhiteSpace(l.Value)).ToList();
             var bold = visible.Count > 0 && visible.Count(IsBold) * 2 > visible.Count;
