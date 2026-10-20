@@ -194,8 +194,9 @@ public static partial class PdfStructure
 
         // Ruled tables: a rule between every two rows separates them, even with a single filled cell in a row.
         var ruled = anchors.Zip(anchors.Skip(1)).All(p => RuleBetween(horizontal, p.First.Baseline, p.Second.Baseline, left, right));
-        // Without rules, two lines in two columns are too weak a hint (a letterhead with an address and a date).
-        if (!ruled && anchors.Count < 3 && columns.Count < 3)
+        // Without rules, two lines are too weak a hint: a letterhead with an address and a date, or two lines of
+        // justified text whose wide word gaps happen to line up.
+        if (!ruled && anchors.Count < 3)
             return null;
 
         var rows = new List<List<Line>>();
@@ -230,6 +231,16 @@ public static partial class PdfStructure
         });
         if (texty)
             return null;
+
+        // Justified prose split at its wide word gaps: cells are single ordinary words ("protáhla," "že"),
+        // where a real table holds labels, names and numbers.
+        if (!ruled)
+        {
+            var cellTexts = segments.Select(s => string.Join(" ", s.Words.Select(w => w.Text))).ToList();
+            var prose = cellTexts.Count(t => !t.Contains(' ') && t.Length > 0 && char.IsLower(t[0]) || t.EndsWith(',') || t.EndsWith(';'));
+            if (prose * 2 >= cellTexts.Count)
+                return null;
+        }
 
         var cells = rows.Select(row => Enumerable.Range(0, columns.Count).Select(c =>
             JoinLines(row.SelectMany(l => l.Segments.Where(s => ColumnOf(s) == c)).Select(s => RenderWords(s.Words).Markdown))).ToList()).ToList();

@@ -88,12 +88,13 @@ public static partial class PdfStructure
             .OrderBy(b => b.ReadingOrder).ToList();
         foreach (var table in tables)
             SplitAround(blocks, table);
-        // Bullets often sit apart from their text and end up as a block of their own; remember where they
-        // are and give them back to the lines on the same baseline.
-        var bullets = new List<(double Y, double X)>();
-        foreach (var block in blocks.Where(b => b.TextLines.SelectMany(l => l.Words).All(w => IsBulletOnly(w.Text))).ToList())
+        // Bullets and list numbers ("1.", "a)") often sit apart from their text and end up as a block of their
+        // own; remember where they are and give them back to the lines on the same baseline.
+        var bullets = new List<(double Y, double X, string Marker)>();
+        foreach (var block in blocks.Where(b => b.TextLines.SelectMany(l => l.Words).All(w => IsBulletOnly(w.Text) || ListLabelRegex().IsMatch(w.Text.Trim()))).ToList())
         {
-            bullets.AddRange(block.TextLines.SelectMany(l => l.Words).Select(w => (w.BoundingBox.Bottom, w.BoundingBox.Right)));
+            bullets.AddRange(block.TextLines.SelectMany(l => l.Words).Select(w => (w.BoundingBox.Bottom, w.BoundingBox.Right,
+                IsBulletOnly(w.Text) ? "•" : w.Text.Trim())));
             blocks.Remove(block);
         }
         var parts = blocks.Select(b => (Top: b.BoundingBox.Top, b.BoundingBox.Left, b.BoundingBox.Right, Text: RenderBlock(b, body, bullets)))
@@ -176,7 +177,7 @@ public static partial class PdfStructure
         return t.Length == 1 && BulletRegex().IsMatch(t + " ");
     }
 
-    private static string RenderBlock(TextBlock block, double body, List<(double Y, double X)> bullets)
+    private static string RenderBlock(TextBlock block, double body, List<(double Y, double X, string Marker)> bullets)
     {
         var lines = block.TextLines.Where(l => l.Words.Count > 0).ToList();
         if (lines.Count == 0)
@@ -200,8 +201,10 @@ public static partial class PdfStructure
         var rendered = lines.Select(line =>
         {
             var r = RenderLine(line);
-            var bulleted = bullets.Any(b => Math.Abs(b.Y - line.BoundingBox.Bottom) < 3 && b.X <= line.BoundingBox.Left + 1);
-            return bulleted && !BulletRegex().IsMatch(r.Plain) ? (Markdown: "• " + r.Markdown, Plain: "• " + r.Plain) : r;
+            var marker = bullets.FirstOrDefault(b => Math.Abs(b.Y - line.BoundingBox.Bottom) < 3 && b.X <= line.BoundingBox.Left + 1).Marker;
+            return marker is not null && !BulletRegex().IsMatch(r.Plain) && !NumberRegex().IsMatch(r.Plain)
+                ? (Markdown: marker + " " + r.Markdown, Plain: marker + " " + r.Plain)
+                : r;
         }).ToList();
         if (rendered.Any(l => BulletRegex().IsMatch(l.Plain) || NumberRegex().IsMatch(l.Plain)))
             return RenderList(rendered);
