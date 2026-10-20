@@ -45,7 +45,9 @@ public static class Cli
           fileaction FILE...               {T("kolo pro tyto soubory", "the wheel for these files")}
           fileaction list FILE...          {T("co se s nimi dá udělat", "what can be done with them")}
           fileaction run ID FILE... [--param KEY=VALUE]... [--out DIR]
-                                           {T("spustí převod nebo nástroj (ID z list)", "runs a conversion or tool (ID from list)")}
+                                           {T("spustí převod, nástroj nebo předvolbu (ID z list)", "runs a conversion, tool or preset (ID from list)")}
+          fileaction --settings            {T("předvolby, sledované složky, zpětná vazba", "presets, watched folders, feedback")}
+          fileaction --watch               {T("sleduje složky z nastavení (spouští se samo)", "watches the folders from the settings (starts by itself)")}
           fileaction integrate [--remove]  {T("položka FileAction v Nautilu, Dolphinu a Nemu", "FileAction item in Nautilus, Dolphin and Nemo")}
           fileaction --version
         """;
@@ -123,6 +125,8 @@ public static class Cli
             Progress = Console.IsErrorRedirected ? new Progress<double>() : new ConsoleProgress(),
         };
         var result = op.ExecuteAsync(items, context).GetAwaiter().GetResult();
+        if (settings.WatchFolders.Count > 0)
+            Shell.RecentResults.Add(result.Outputs);
         if (!Console.IsErrorRedirected)
             Console.Error.Write("\r       \r");
         foreach (var path in result.Outputs)

@@ -13,7 +13,7 @@ public static class Integration
         : Path.Combine(LinuxSettings.Home, ".local", "share");
 
     /// <summary>"fileaction" when it is on PATH (package install), otherwise the full path of this binary.</summary>
-    private static string Command =>
+    internal static string Command =>
         TesseractOcr.FindInPath("fileaction") is not null ? "fileaction" : Environment.ProcessPath ?? "fileaction";
 
     public static string NautilusScript(string command) => $"""
@@ -63,6 +63,12 @@ public static class Integration
         Terminal=false
         Categories=Utility;FileTools;
         Keywords=convert;converter;image;video;audio;pdf;ocr;
+        Actions=settings;
+
+        [Desktop Action settings]
+        Name=Settings
+        Name[cs]=Nastavení
+        Exec={command} --settings
 
         """;
 
