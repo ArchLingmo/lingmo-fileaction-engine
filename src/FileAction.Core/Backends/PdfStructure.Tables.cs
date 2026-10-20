@@ -286,7 +286,7 @@ public static partial class PdfStructure
         var vertical = new List<Rule>();
         try
         {
-            foreach (var path in page.ExperimentalAccess.Paths)
+            foreach (var path in page.Paths)
             {
                 if (path.IsClipping || !(path.IsStroked || path.IsFilled))
                     continue;
