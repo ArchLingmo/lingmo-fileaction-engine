@@ -352,7 +352,8 @@ public static partial class SpreadsheetBackend
 
     // ---------------------------------------------------------------- XLSX out
 
-    public static void WriteXlsx(IReadOnlyList<Sheet> sheets, string output)
+    /// <param name="headerRow">The first row is a header (tables from a PDF); otherwise it is guessed.</param>
+    public static void WriteXlsx(IReadOnlyList<Sheet> sheets, string output, bool headerRow = false)
     {
         using var workbook = new XLWorkbook();
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -368,8 +369,12 @@ public static partial class SpreadsheetBackend
             }
             if (sheet.Rows.Count > 0)
             {
-                if (LooksLikeHeader(sheet.Rows))
+                if (headerRow || LooksLikeHeader(sheet.Rows))
+                {
                     ws.Row(1).Style.Font.Bold = true;
+                    if (headerRow)
+                        ws.SheetView.FreezeRows(1);
+                }
                 ws.Columns().AdjustToContents(1, Math.Min(sheet.Rows.Count, 200), 8, 60);
             }
         }

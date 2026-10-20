@@ -259,6 +259,8 @@ public static class Catalog
             ops.Add(new PerFileOperation($"pdf.to.{text}", WheelKind.Convert, Formats.Display(text), Glyphs.Text, Formats.Pdf,
                 async (item, ctx, _) => [await PdfBackend.ToTextAsync(item, text, ctx)], subtitle: text == "md" ? "Markdown" : "text"));
         }
+        ops.Add(new PerFileOperation("pdf.to.xlsx", WheelKind.Convert, "XLSX", Glyphs.Table, Formats.Pdf,
+            async (item, ctx, _) => [await PdfBackend.ToSpreadsheetAsync(item, ctx)], subtitle: T("tabulky", "tables")));
         ops.Add(PdfDoc("html", "web"));
         ops.Add(PdfDoc("epub", T("e-kniha", "e-book")));
 

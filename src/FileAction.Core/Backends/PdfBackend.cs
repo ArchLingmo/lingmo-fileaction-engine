@@ -8,7 +8,7 @@ using static FileAction.Core.Loc;
 namespace FileAction.Core.Backends;
 
 /// <summary>PDF rendering (PDFium), text extraction (PdfPig) and page operations (PDFsharp).</summary>
-public static class PdfBackend
+public static partial class PdfBackend
 {
     public static int PageCount(string path)
     {

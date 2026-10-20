@@ -18,7 +18,8 @@ public static partial class PdfStructure
     private static partial Regex ListLabelRegex();
 
     /// <summary>A table found on a page: its Markdown, where it sits (for reading order) and the words it took.</summary>
-    private sealed record PageTable(double Top, double Bottom, double Left, double Right, string Markdown, IReadOnlyCollection<Word> Words);
+    private sealed record PageTable(double Top, double Bottom, double Left, double Right, string Markdown, IReadOnlyCollection<Word> Words,
+        List<List<string>> Cells);
 
     /// <summary>A ruling line: horizontal ones run From–To in x at height At, vertical ones From–To in y at x = At.</summary>
     private readonly record struct Rule(double From, double To, double At);
@@ -55,7 +56,7 @@ public static partial class PdfStructure
             return tables;
         var (horizontal, vertical) = Rulings(page);
         var region = new List<Line>();
-        foreach (var line in Lines(words, vertical))
+        foreach (var line in SplitAtColumns(Lines(words, vertical)))
         {
             if (region.Count > 0 && !Fits(region, line, horizontal))
             {
@@ -121,6 +122,59 @@ public static partial class PdfStructure
             lines.Add(new Line(baseline, group.Average(Size), segments));
         }
         return lines;
+    }
+
+    /// <summary>
+    /// Tight tables (no borders, little padding) leave gaps between neighbouring header cells no wider than a
+    /// generous space ("Množství Cena za ks"). Such a segment is split where one of its words starts exactly
+    /// where cells start on two of the four nearest rows, and the gap before it is wider than
+    /// a space. Only near rows count: on a page of justified text some word somewhere always lines up.
+    /// </summary>
+    private static List<Line> SplitAtColumns(List<Line> lines)
+    {
+        // A split row confirms the column for the rows around it, so repeat until nothing changes.
+        for (var pass = 0; pass < 4; pass++)
+        {
+            var split = SplitAtColumnsOnce(lines);
+            if (split.Zip(lines).All(p => ReferenceEquals(p.First, p.Second)))
+                break;
+            lines = split;
+        }
+        return lines;
+    }
+
+    private static List<Line> SplitAtColumnsOnce(List<Line> lines)
+    {
+        var rows = lines.Where(l => l.IsRow).ToList();
+        if (rows.Count < 3)
+            return lines;
+        var result = new List<Line>(lines.Count);
+        foreach (var line in lines)
+        {
+            var near = rows.Where(r => r != line && Math.Abs(r.Baseline - line.Baseline) <= 8 * line.Size)
+                .OrderBy(r => Math.Abs(r.Baseline - line.Baseline)).Take(4).ToList();
+            var segments = new List<Segment>();
+            foreach (var segment in line.Segments)
+            {
+                var current = new List<Word> { segment.Words[0] };
+                for (var i = 1; i < segment.Words.Count; i++)
+                {
+                    var word = segment.Words[i];
+                    var gap = word.BoundingBox.Left - segment.Words[i - 1].BoundingBox.Right;
+                    var aligned = gap > 0.4 * line.Size
+                        && near.Count(r => r.Segments.Skip(1).Any(s => Math.Abs(s.Left - word.BoundingBox.Left) <= 1)) >= 2;
+                    if (aligned)
+                    {
+                        segments.Add(new Segment(current));
+                        current = [];
+                    }
+                    current.Add(word);
+                }
+                segments.Add(new Segment(current));
+            }
+            result.Add(segments.Count == line.Segments.Count ? line : new Line(line.Baseline, line.Size, segments));
+        }
+        return result;
     }
 
     /// <summary>Columns: the x ranges covered by cells, merged where they overlap (left to right).</summary>
@@ -245,7 +299,10 @@ public static partial class PdfStructure
         var cells = rows.Select(row => Enumerable.Range(0, columns.Count).Select(c =>
             JoinLines(row.SelectMany(l => l.Segments.Where(s => ColumnOf(s) == c)).Select(s => RenderWords(s.Words).Markdown))).ToList()).ToList();
         var words = segments.SelectMany(s => s.Words).ToList();
-        return new PageTable(words.Max(w => w.BoundingBox.Top), words.Min(w => w.BoundingBox.Bottom), left, right, PipeTable(cells, columns, rows, ColumnOf), words);
+        // The same cells as plain text, for spreadsheets.
+        var plain = rows.Select(row => Enumerable.Range(0, columns.Count).Select(c =>
+            JoinLines(row.SelectMany(l => l.Segments.Where(s => ColumnOf(s) == c)).Select(s => FixSymbols(string.Join(" ", s.Words.Select(w => w.Text)))))).ToList()).ToList();
+        return new PageTable(words.Max(w => w.BoundingBox.Top), words.Min(w => w.BoundingBox.Bottom), left, right, PipeTable(cells, columns, rows, ColumnOf), words, plain);
     }
 
     /// <summary>
