@@ -111,6 +111,8 @@ Linux aplikacím nedovolí sledovat klávesnici a myš jiných programů (Waylan
   fileaction run video.trim klip.mov --param start=0:10 --param end=0:25
   ```
 
+- **Nastavení:** `fileaction --settings` (také *Nastavení* v nabídce pravého tlačítka u položky v nabídce aplikací, nebo tlačítko v rohu kola pro přetahování) – předvolby, sledované složky, zpětná vazba a podpora. Předvolby se objeví na kolech i ve `fileaction list/run`. Sledované složky obsluhuje `fileaction --watch` na pozadí, který se spouští s přihlášením, dokud je zapnutá aspoň jedna složka.
+
 Volitelné balíčky: `ffmpeg` (audio, video), `pandoc-cli` (dokumenty), `libreoffice-fresh` (Office), `tesseract` + `tesseract-data-ces` (text z obrázku). Nastavení je v `~/.config/fileaction/settings.json`.
 
 ## Sestavení ze zdrojů

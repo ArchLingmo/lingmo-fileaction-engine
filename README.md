@@ -111,6 +111,8 @@ Linux doesn't let apps watch the keyboard and mouse of other programs (Wayland f
   fileaction run video.trim clip.mov --param start=0:10 --param end=0:25
   ```
 
+- **Settings:** `fileaction --settings` (also *Settings* in the app menu entry's right-click menu, or the button at the corner of the drop zone) for presets, watched folders, feedback and support. Presets show up on the wheels and in `fileaction list/run`. Watched folders are handled by a background `fileaction --watch`, started automatically when you log in while at least one folder is on.
+
 Optional packages: `ffmpeg` (audio, video), `pandoc-cli` (documents), `libreoffice-fresh` (Office files), `tesseract` + `tesseract-data-eng` (extract text). Settings live in `~/.config/fileaction/settings.json`.
 
 ## Build from source

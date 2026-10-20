@@ -17,7 +17,7 @@ public sealed class LinuxSettings
         Environment.GetEnvironmentVariable("XDG_CONFIG_HOME") is { Length: > 0 } xdg ? xdg : Path.Combine(Home, ".config"),
         "fileaction");
 
-    private static string FilePath => Path.Combine(Folder, "settings.json");
+    public static string FilePath =>Path.Combine(Folder, "settings.json");
 
     /// <summary>Null = follow the system language.</summary>
     public Language? Language { get; set; }
@@ -34,17 +34,30 @@ public sealed class LinuxSettings
     /// <summary>Tesseract languages for OCR, e.g. "ces+eng"; empty = pick from what is installed.</summary>
     public string? OcrLanguages { get; set; }
 
-    public static LinuxSettings Load()
+    /// <summary>The user's own slices (on the wheels, in <c>fileaction list/run</c> and in watched folders).</summary>
+    public List<Preset> Presets { get; set; } = [];
+
+    /// <summary>Folders whose new files the background <c>fileaction --watch</c> processes.</summary>
+    public List<WatchFolder> WatchFolders { get; set; } = [];
+
+    /// <summary>True when at least one folder should be watched.</summary>
+    public bool IsWatching() => WatchFolders.Any(f => f.Enabled && !string.IsNullOrWhiteSpace(f.OperationId));
+
+    public static LinuxSettings Load() => TryLoad() ?? new LinuxSettings();
+
+    /// <summary>The saved settings (defaults when there is no file yet); null when the file can't be read.</summary>
+    public static LinuxSettings? TryLoad()
     {
         try
         {
-            if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize(File.ReadAllText(FilePath), LinuxSettingsJson.Default.LinuxSettings) ?? new LinuxSettings();
+            return File.Exists(FilePath)
+                ? JsonSerializer.Deserialize(File.ReadAllText(FilePath), LinuxSettingsJson.Default.LinuxSettings)
+                : new LinuxSettings();
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
+            return null;
         }
-        return new LinuxSettings();
     }
 
     public void Save()

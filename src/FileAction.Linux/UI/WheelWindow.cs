@@ -34,6 +34,7 @@ public sealed class WheelWindow : Window
     private readonly OperationSource _source;
     private readonly Action<Operation, IReadOnlyList<FileItem>, bool> _execute;
     private readonly bool _dropZone;
+    private readonly Action? _openSettings;
     private readonly Canvas _canvas = new() { Width = Size, Height = Size };
     private readonly List<Path> _slices = [];
     private readonly List<StackPanel> _labels = [];
@@ -46,12 +47,14 @@ public sealed class WheelWindow : Window
     private bool _dragging;
 
     /// <param name="execute">Runs an operation; the flag says it is a "repeat last" run.</param>
-    public WheelWindow(IReadOnlyList<FileItem>? items, OperationSource source, Action<Operation, IReadOnlyList<FileItem>, bool> execute)
+    /// <param name="openSettings">Opens the settings; the drop zone shows a small button for it.</param>
+    public WheelWindow(IReadOnlyList<FileItem>? items, OperationSource source, Action<Operation, IReadOnlyList<FileItem>, bool> execute, Action? openSettings = null)
     {
         _items = items ?? [];
         _dropZone = _items.Count == 0;
         _source = source;
         _execute = execute;
+        _openSettings = openSettings;
 
         Title = "FileAction";
         Width = Size;
@@ -433,6 +436,48 @@ public sealed class WheelWindow : Window
         content.Measure(Avalonia.Size.Infinity);
         Place(content, Size / 2 - content.DesiredSize.Width / 2, Size / 2 - content.DesiredSize.Height / 2);
         _canvas.Children.Add(content);
+
+        if (_dropZone && _openSettings is not null)
+            _canvas.Children.Add(SettingsButton());
+    }
+
+    /// <summary>Three sliders in a small circle at the bottom right, outside the ring.</summary>
+    private Border SettingsButton()
+    {
+        const double size = 34;
+        var button = new Border
+        {
+            Width = size,
+            Height = size,
+            CornerRadius = new CornerRadius(size / 2),
+            Background = Palette.Hub,
+            BorderBrush = Palette.PanelBorder,
+            BorderThickness = new Thickness(1),
+            Cursor = new Cursor(StandardCursorType.Hand),
+            Child = new Path
+            {
+                Data = Geometry.Parse("M4 6 L16 6 M4 10 L16 10 M4 14 L16 14 M7 4.5 L7 7.5 M13 8.5 L13 11.5 M9 12.5 L9 15.5"),
+                Stroke = Palette.Muted,
+                StrokeThickness = 1.6,
+                StrokeLineCap = PenLineCap.Round,
+                Width = 20,
+                Height = 20,
+                Stretch = Stretch.None,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
+        ToolTip.SetTip(button, T("Nastavení", "Settings"));
+        button.PointerEntered += (_, _) => button.Background = Palette.Slice;
+        button.PointerExited += (_, _) => button.Background = Palette.Hub;
+        button.PointerPressed += (_, e) => e.Handled = true;
+        button.PointerReleased += (_, e) =>
+        {
+            e.Handled = true;
+            _openSettings?.Invoke();
+        };
+        Place(button, Size - size - 4, Size - size - 4);
+        return button;
     }
 
     private static bool IsFormat(Operation op) => op.Wheel == WheelKind.Convert && op.Label.Length <= 6 && op.Label.ToUpperInvariant() == op.Label;
