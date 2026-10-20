@@ -122,7 +122,7 @@ public static partial class PdfStructure
                 parts.Insert(index < 0 ? parts.Count : index, (image.BoundingBox.Top, image.BoundingBox.Left, image.BoundingBox.Right, markdown));
             }
         }
-        return parts.Select(p => p.Text).ToList();
+        return JoinContinuations(parts.Select(p => p.Text).ToList());
     }
 
     /// <summary>
@@ -169,6 +169,36 @@ public static partial class PdfStructure
             // An image PdfPig cannot decode is skipped; the text still converts.
         }
         return null;
+    }
+
+    /// <summary>
+    /// A paragraph that runs on into the next column ends one block without finishing its sentence, and the
+    /// next block starts in lower case: they are one paragraph again.
+    /// </summary>
+    private static List<string> JoinContinuations(List<string> parts)
+    {
+        var joined = new List<string>();
+        foreach (var part in parts)
+        {
+            if (joined.Count > 0 && IsPlainParagraph(joined[^1]) && IsPlainParagraph(part)
+                && !".!?:…\"“”»".Contains(joined[^1].TrimEnd()[^1]) && char.IsLower(part.TrimStart('*', '_')[0]))
+            {
+                var previous = joined[^1].TrimEnd();
+                joined[^1] = previous.EndsWith('-') && previous.Length > 1 && char.IsLetter(previous[^2])
+                    ? previous[..^1] + part.TrimStart()
+                    : previous + " " + part.TrimStart();
+                continue;
+            }
+            joined.Add(part);
+        }
+        return joined;
+    }
+
+    /// <summary>Running text, not a heading, list, table, picture or raw block.</summary>
+    private static bool IsPlainParagraph(string markdown)
+    {
+        var t = markdown.TrimStart();
+        return t.Length > 0 && !t.Contains('\n') && t[0] is not ('#' or '-' or '|' or '!' or '`' or '•') && !NumberRegex().IsMatch(t);
     }
 
     private static bool IsBulletOnly(string text)
