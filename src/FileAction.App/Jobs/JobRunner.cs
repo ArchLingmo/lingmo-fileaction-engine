@@ -94,7 +94,32 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
                 card.Report(0);
             }
             slot = true;
-            var result = await Task.Run(() => op.ExecuteAsync(items, context));
+            OperationResult result;
+            try
+            {
+                result = await Task.Run(() => op.ExecuteAsync(items, context));
+            }
+            catch (Exception ex) when (context.OutputDirectory is null && IsReadOnlyTarget(ex))
+            {
+                // The file sits somewhere we can't write (a DVD, Program Files, a read-only share):
+                // put the result into Downloads\FileAction instead of failing, and say so.
+                var fallback = new OperationContext
+                {
+                    Tools = tools,
+                    Progress = context.Progress,
+                    CancellationToken = cts.Token,
+                    OutputDirectory = KnownFolders.Incoming,
+                    Parameters = parameters,
+                    Settings = settings.Quality,
+                };
+                card.Report(0);
+                result = await Task.Run(() => op.ExecuteAsync(items, fallback));
+                result = result with
+                {
+                    Note = T($"Do původní složky nejde zapisovat, výsledek je v {KnownFolders.Incoming}.",
+                             $"The original folder is read-only; the result is in {KnownFolders.Incoming}."),
+                };
+            }
             Produced?.Invoke(result.Outputs);
             card.Complete(result.Outputs, result.Message, result.Note);
             if (!automatic && settings.RevealResult && result.Outputs.Count > 0)
@@ -178,12 +203,32 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
         settings.Save();
     }
 
+    /// <summary>Writing failed because the target folder (or disk) refuses it, not because of the file itself.</summary>
+    private static bool IsReadOnlyTarget(Exception ex) => ex switch
+    {
+        UnauthorizedAccessException => true,
+        // ERROR_WRITE_PROTECT (DVD, locked SD card) and ERROR_ACCESS_DENIED surfaced as IOException.
+        System.IO.IOException io => (io.HResult & 0xFFFF) is 19 or 5,
+        AggregateException agg => agg.InnerExceptions.Any(IsReadOnlyTarget),
+        _ => ex.InnerException is { } inner && IsReadOnlyTarget(inner),
+    };
+
+    /// <summary>A sentence a person can act on; no exception type names.</summary>
     private static string Friendly(Exception ex) => ex switch
     {
         ConversionException => ex.Message,
         UnauthorizedAccessException => T("Do cílové složky nelze zapisovat. Zkuste v nastavení zvolit jinou výstupní složku.", "Cannot write to the target folder. Choose another output folder in Settings."),
-        System.IO.IOException => T($"Chyba souboru: {ex.Message}", $"File error: {ex.Message}"),
-        ImageMagick.MagickException => T($"Obrázek se nepodařilo zpracovat: {ex.Message}", $"Could not process the image: {ex.Message}"),
-        _ => $"{ex.GetType().Name}: {ex.Message}",
+        System.IO.FileNotFoundException or System.IO.DirectoryNotFoundException =>
+            T("Soubor mezitím zmizel nebo byl přesunut.", "The file was moved or deleted in the meantime."),
+        System.IO.PathTooLongException => T("Cesta k souboru je příliš dlouhá. Zkuste ho přesunout výš ve složkách.", "The path is too long. Try moving the file higher up in its folders."),
+        System.IO.IOException io when (io.HResult & 0xFFFF) is 32 or 33 =>
+            T("Soubor má otevřený jiný program. Zavřete ho a zkuste to znovu.", "Another program has the file open. Close it and try again."),
+        System.IO.IOException io when (io.HResult & 0xFFFF) is 112 or 39 =>
+            T("Na disku došlo místo.", "The disk is full."),
+        System.IO.IOException => T($"Chyba při práci se souborem: {ex.Message}", $"File error: {ex.Message}"),
+        ImageMagick.MagickException => T("Obrázek se nepodařilo přečíst; je možná poškozený nebo v nepodporované variantě formátu.",
+                                         "Could not read the image; it may be damaged or in an unsupported variant of the format."),
+        OutOfMemoryException => T("Soubor je na převod příliš velký (došla paměť).", "The file is too large to convert (out of memory)."),
+        _ => T($"Něco se nepovedlo: {ex.Message}", $"Something went wrong: {ex.Message}"),
     };
 }

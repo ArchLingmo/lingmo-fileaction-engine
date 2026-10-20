@@ -152,8 +152,8 @@ internal sealed partial class SettingsWindow
             Padding = new Thickness(10),
             Child = _wheelHost,
         });
-        var hint = Text(T("Kolo se otevře přesně takhle. Pořadí platí pro všechny typy souborů: co dáte na první místo tady, bude první všude, kde se nabízí.",
-                          "The wheel opens exactly like this. The order applies to every file type: what you put first here comes first wherever it is offered."), 12, brush: Theme.Muted);
+        var hint = Text(T("Kolo se otevře přesně takhle. Pořadí platí pro všechny typy souborů: co dáte na první místo tady, bude první všude, kde se nabízí. Bez myši: v knihovně Ctrl+šipky přesunou výseč, Delete ji skryje, Insert vrátí.",
+                          "The wheel opens exactly like this. The order applies to every file type: what you put first here comes first wherever it is offered. Without a mouse: in the library, Ctrl+arrows move a slice, Delete hides it, Insert brings it back."), 12, brush: Theme.Muted);
         hint.Margin = new Thickness(4, 10, 4, 0);
         middle.Children.Add(hint);
         if (_visibleOps.Count > 12)
@@ -216,16 +216,18 @@ internal sealed partial class SettingsWindow
                 Child = text,
             };
             var target = w;
-            tab.MouseLeftButtonUp += (_, _) =>
+            var button = Clickable(tab, AppSettings.WheelName(w), () =>
             {
                 if (_drag is { Active: true })
                     return;
                 _wheel = target;
                 _group = 0;
                 Rebuild();
-            };
+            });
+            if (on)
+                System.Windows.Automation.AutomationProperties.SetItemStatus(button, T("vybráno", "selected"));
             _wheelTabs.Add((tab, w));
-            panel.Children.Add(tab);
+            panel.Children.Add(button);
         }
         return new Border { Background = Theme.Track, CornerRadius = new CornerRadius(9), Padding = new Thickness(2), Child = panel };
     }
@@ -257,7 +259,7 @@ internal sealed partial class SettingsWindow
             Save();
             // Let the switch finish its animation before the wheel redraws.
             Dispatcher.BeginInvoke(Rebuild, System.Windows.Threading.DispatcherPriority.Background);
-        });
+        }, T($"Zobrazit {op.Label} na kole", $"Show {op.Label} on the wheel"));
         toggle.Margin = new Thickness(6, 0, 8, 0);
         toggle.VerticalAlignment = VerticalAlignment.Center;
 
@@ -308,16 +310,14 @@ internal sealed partial class SettingsWindow
                 VerticalAlignment = VerticalAlignment.Center,
                 ToolTip = T($"Vrátit na kolo {AppSettings.WheelName(r.HomeWheel)}", $"Back to {AppSettings.WheelName(r.HomeWheel)}"),
             };
-            back.MouseLeftButtonDown += (_, e) => e.Handled = true;
-            back.MouseLeftButtonUp += (_, e) =>
+            var backButton = Clickable(back, T($"Vrátit na kolo {AppSettings.WheelName(r.HomeWheel)}", $"Back to {AppSettings.WheelName(r.HomeWheel)}"), () =>
             {
-                e.Handled = true;
                 _settings.WheelOverrides.Remove(op.Id);
                 Save();
                 Rebuild();
-            };
-            DockPanel.SetDock(back, Dock.Right);
-            row.Children.Add(back);
+            });
+            DockPanel.SetDock(backButton, Dock.Right);
+            row.Children.Add(backButton);
         }
         row.Children.Add(label);
         var item = new Border
@@ -327,7 +327,32 @@ internal sealed partial class SettingsWindow
             Background = Brushes.Transparent,
             Cursor = Cursors.SizeAll,
             Child = row,
+            Focusable = true,
+            FocusVisualStyle = FocusRing,
         };
+        // Without a mouse: Ctrl+arrows move the slice, Delete hides it, Insert brings it back.
+        KeyboardNavigation.SetIsTabStop(item, true);
+        System.Windows.Automation.AutomationProperties.SetName(item, op.Label + (hidden ? T(", skrytá", ", hidden") : ""));
+        System.Windows.Automation.AutomationProperties.SetHelpText(item,
+            T("Ctrl+šipky přesunou výseč, Delete ji skryje, Insert vrátí.", "Ctrl+arrows move the slice, Delete hides it, Insert brings it back."));
+        item.KeyDown += (_, e) =>
+        {
+            var ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+            if (ctrl && e.Key is Key.Up or Key.Left or Key.Down or Key.Right && !hidden)
+                MoveSlice(op, e.Key is Key.Up or Key.Left ? -1 : 1);
+            else if (e.Key == Key.Delete && !hidden)
+                SetHidden(op, true);
+            else if (e.Key == Key.Insert && hidden)
+                SetHidden(op, false);
+            else
+                return;
+            e.Handled = true;
+        };
+        if (op.Id == _focusSlice)
+        {
+            _focusSlice = null;
+            item.Loaded += (_, _) => Keyboard.Focus(item);
+        }
         // The switch handles its own clicks; anywhere else on the row starts a drag.
         item.MouseLeftButtonDown += (_, e) =>
         {
@@ -336,6 +361,37 @@ internal sealed partial class SettingsWindow
             BeginDrag(op, fromWheel: false, e);
         };
         return item;
+    }
+
+    /// <summary>The slice whose row gets keyboard focus after the page is rebuilt.</summary>
+    private string? _focusSlice;
+
+    private void MoveSlice(Operation op, int delta)
+    {
+        var ids = _visibleOps.Select(o => o.Id).ToList();
+        var index = ids.IndexOf(op.Id);
+        if (index < 0 || index + delta < 0 || index + delta >= ids.Count)
+            return;
+        _settings.OperationOrder = WheelOrder.Merge(WheelOrder.MoveTo(ids, op.Id, index + delta), _settings.OperationOrder);
+        _focusSlice = op.Id;
+        Save();
+        Rebuild();
+    }
+
+    private void SetHidden(Operation op, bool hide)
+    {
+        if (hide)
+        {
+            if (!_settings.HiddenOperations.Contains(op.Id))
+                _settings.HiddenOperations.Add(op.Id);
+        }
+        else
+        {
+            _settings.HiddenOperations.Remove(op.Id);
+        }
+        _focusSlice = op.Id;
+        Save();
+        Rebuild();
     }
 
     private static bool IsInside(DependencyObject element, DependencyObject container)
@@ -546,7 +602,7 @@ internal sealed partial class SettingsWindow
         return label;
     }
 
-    private Border GroupItem(string name, string glyph, string count, int index)
+    private FrameworkElement GroupItem(string name, string glyph, string count, int index)
     {
         var active = index == _group;
         var row = new DockPanel();
@@ -594,12 +650,14 @@ internal sealed partial class SettingsWindow
             item.MouseEnter += (_, _) => item.Background = Theme.Hover;
             item.MouseLeave += (_, _) => item.Background = Brushes.Transparent;
         }
-        item.MouseLeftButtonUp += (_, _) =>
+        var button = Clickable(item, $"{name}, {count}", () =>
         {
             _group = index;
             Rebuild();
-        };
-        return item;
+        });
+        if (active)
+            System.Windows.Automation.AutomationProperties.SetItemStatus(button, T("vybráno", "selected"));
+        return button;
     }
 
 }

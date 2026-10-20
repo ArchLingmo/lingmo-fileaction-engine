@@ -41,6 +41,7 @@ internal sealed partial class SettingsWindow : Window
     private readonly Action _changed;
     private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     private SettingsPage _page = SettingsPage.General;
+    private bool _welcome;
 
     /// <summary>Above everything; holds what follows the cursor while a slice is dragged.</summary>
     private readonly Canvas _overlay = new() { IsHitTestVisible = false };
@@ -79,9 +80,11 @@ internal sealed partial class SettingsWindow : Window
         };
     }
 
-    public static void ShowSingle(AppSettings settings, ToolLocator tools, Action changed, SettingsPage? page = null)
+    /// <param name="welcome">First run: open on Gestures with a short "here's how" card at the top.</param>
+    public static void ShowSingle(AppSettings settings, ToolLocator tools, Action changed, SettingsPage? page = null, bool welcome = false)
     {
         _open ??= new SettingsWindow(settings, tools, changed);
+        _open._welcome = welcome;
         if (page is { } p)
             _open.Page = p;
         _open.Show();
@@ -101,6 +104,13 @@ internal sealed partial class SettingsWindow : Window
             Build();
             _scroll.ScrollToTop();
         }
+    }
+
+    /// <summary>The first-run view (for the self-test).</summary>
+    internal void ShowWelcome()
+    {
+        _welcome = true;
+        Page = SettingsPage.Gestures;
     }
 
     /// <summary>Lets the self-test render a whole page instead of the visible part.</summary>
@@ -235,7 +245,7 @@ internal sealed partial class SettingsWindow : Window
         };
     }
 
-    private Border NavItem(SettingsPage page)
+    private FrameworkElement NavItem(SettingsPage page)
     {
         var active = page == _page;
         var row = new StackPanel { Orientation = Orientation.Horizontal };
@@ -263,8 +273,10 @@ internal sealed partial class SettingsWindow : Window
             item.MouseEnter += (_, _) => item.Background = Theme.Hover;
             item.MouseLeave += (_, _) => item.Background = System.Windows.Media.Brushes.Transparent;
         }
-        item.MouseLeftButtonUp += (_, _) => Page = page;
-        return item;
+        var button = Clickable(item, PageName(page), () => Page = page);
+        if (active)
+            System.Windows.Automation.AutomationProperties.SetItemStatus(button, T("otevřeno", "current page"));
+        return button;
     }
 
     private static void PageHeader(Panel page, string title, string subtitle)
@@ -343,6 +355,8 @@ internal sealed partial class SettingsWindow : Window
     private void GesturesPage(Panel root)
     {
         PageHeader(root, PageName(SettingsPage.Gestures), T("Která klávesa otevře které kolo a zkratka bez myši.", "Which key opens which wheel, and a shortcut without the mouse."));
+        if (_welcome)
+            root.Children.Add(WelcomeCard());
 
         root.Children.Add(SectionHeader(T("Gesto", "Gesture")));
         root.Children.Add(Card(
@@ -382,6 +396,56 @@ internal sealed partial class SettingsWindow : Window
             glyph: ""));
     }
 
+    /// <summary>Shown once, on the first start: the whole idea in three steps, with the user's own keys.</summary>
+    private Border WelcomeCard()
+    {
+        var convert = AppSettings.KeyName(_settings.ConvertKey);
+        var steps = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
+        foreach (var (number, text) in new[]
+                 {
+                     ("1", T("Chyťte soubor myší – v Průzkumníku, na ploše, obrázek v prohlížeči.", "Grab a file with the mouse – in File Explorer, on the desktop, an image in your browser.")),
+                     ("2", T($"Během tažení ťukněte na {convert}. Otevře se kolo s formáty.", $"While dragging, tap {convert}. A wheel of formats opens.")),
+                     ("3", T("Pusťte soubor na formát. Výsledek se uloží vedle originálu.", "Drop the file on a format. The result is saved next to the original.")),
+                 })
+        {
+            var row = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
+            var badge = new Border
+            {
+                Width = 24,
+                Height = 24,
+                CornerRadius = new CornerRadius(12),
+                Background = Theme.AccentGradient,
+                Margin = new Thickness(0, 0, 12, 0),
+                Child = new TextBlock { Text = number, Foreground = Theme.TextOnAccent, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+            };
+            DockPanel.SetDock(badge, Dock.Left);
+            row.Children.Add(badge);
+            var line = Text(text, 14);
+            line.VerticalAlignment = VerticalAlignment.Center;
+            row.Children.Add(line);
+            steps.Children.Add(row);
+        }
+        var title = Text(T("Vítejte ve FileAction", "Welcome to FileAction"), 18, FontWeights.SemiBold);
+        title.FontFamily = Theme.DisplayFont;
+        var hint = Text(T("FileAction běží v oznamovací oblasti vpravo dole. Klávesy si můžete změnit níže.",
+                          "FileAction runs in the notification area at the bottom right. You can change the keys below."), 12.5, brush: Theme.Muted);
+        hint.Margin = new Thickness(0, 4, 0, 0);
+        var body = new StackPanel();
+        body.Children.Add(title);
+        body.Children.Add(steps);
+        body.Children.Add(hint);
+        return new Border
+        {
+            Background = Theme.AccentSoft,
+            BorderBrush = Theme.Accent,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(12),
+            Padding = new Thickness(20, 16, 20, 16),
+            Margin = new Thickness(0, 14, 0, 4),
+            Child = body,
+        };
+    }
+
     private static string WheelGlyph(WheelKind wheel) => wheel switch
     {
         WheelKind.Convert => "",
@@ -397,6 +461,14 @@ internal sealed partial class SettingsWindow : Window
             Slider(50, 100, _settings.Quality.JpegQuality, v => _settings.Quality.JpegQuality = v, Save), glyph: Glyphs.Photo));
         root.Children.Add(Card(T("Komprimovat", "Compress"), T("Kvalita nástroje Komprimovat", "Quality of the Compress tool"),
             Slider(30, 95, _settings.Quality.CompressQuality, v => _settings.Quality.CompressQuality = v, Save), glyph: Glyphs.Shrink));
+        root.Children.Add(Card(T("Odstranit polohu z fotek", "Remove the location from photos"),
+            T("Při převodu a úpravách obrázků zmizí GPS souřadnice místa, kde fotka vznikla. Ostatní údaje zůstanou.",
+              "Converting or editing an image removes the GPS position where the photo was taken. Everything else stays."),
+            Toggle(_settings.Quality.StripLocation, v =>
+            {
+                _settings.Quality.StripLocation = v;
+                Save();
+            }), glyph: ""));
         root.Children.Add(SectionHeader("PDF"));
         root.Children.Add(Card(T("PDF na obrázky", "PDF to images"), T("Rozlišení v DPI", "Resolution in DPI"),
             Slider(72, 600, _settings.Quality.PdfDpi, v => _settings.Quality.PdfDpi = v, Save), glyph: Glyphs.Page));

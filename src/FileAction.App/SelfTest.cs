@@ -37,7 +37,7 @@ internal static class SelfTest
 
             log.AddRange(SmokeTest.Run(Path.Combine(outDir, "smoke")));
             // Saved after every step, so a hard crash (which skips the catch below) still shows where it stopped.
-            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestWatchFolder(outDir, log), () => TestWheelDrag(outDir, log), () => TestColdStartForwarding(log), () => TestOcr(outDir, log), () => TestUpdateCheck(log) })
+            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestWatchFolder(outDir, log), () => TestWheelDrag(outDir, log), () => TestColdStartForwarding(log), () => TestKeyboardAccess(log), () => TestOcr(outDir, log), () => TestUpdateCheck(log) })
             {
                 File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
                 step();
@@ -116,6 +116,13 @@ internal static class SelfTest
         SaveWindow(watchDialog, Path.Combine(outDir, "watch-dialog.png"), 640);
         watchDialog.Close();
         log.Add($"ok {Path.GetFileName(outDir)}/preset and watch dialogs");
+
+        var welcome = new SettingsWindow(settings, tools, () => { });
+        welcome.ShowWelcome();
+        welcome.ExpandForPreview();
+        SaveWindow(welcome, Path.Combine(outDir, "settings-welcome.png"), 1000);
+        welcome.Close();
+        log.Add($"ok {Path.GetFileName(outDir)}/settings-welcome");
 
         var toolsWheel = new SettingsWindow(settings, tools, () => { });
         toolsWheel.ShowWheel(WheelKind.Tools, 0);
@@ -371,6 +378,63 @@ internal static class SelfTest
         Check(senders.All(t => t.Result), "every sender reached the running copy");
         Check(received.Distinct().Count() == 12, $"all 12 files arrived (got {received.Count})");
         log.Add("ok cold-start forwarding (12 files at once)");
+    }
+
+    /// <summary>
+    /// Every page of Settings: everything Tab can reach has a name for screen readers, and each page has
+    /// something to reach (a page of mouse-only controls would fail).
+    /// </summary>
+    private static void TestKeyboardAccess(List<string> log)
+    {
+        Loc.Current = Language.English;
+        Theme.Refresh();
+        var settings = new AppSettings();
+        settings.Presets = [new Preset { Name = "Web", Kind = PresetKind.Image, Format = "jpg" }];
+        settings.WatchFolders = [new WatchFolder { Path = Path.GetTempPath(), OperationId = "image.to.jpg" }];
+        var core = WheelController.BuildOperations();
+        SettingsWindow.Operations = () => [.. core, .. FileActions.Build(settings, () => { })];
+        var window = new SettingsWindow(settings, new ToolLocator(), () => { })
+        {
+            Left = -20000,
+            Top = -20000,
+            Width = 1240,
+            Height = 900,
+            ShowActivated = false,
+            ShowInTaskbar = false,
+        };
+        window.Show();
+        try
+        {
+            foreach (var page in Enum.GetValues<SettingsPage>())
+            {
+                window.Page = page;
+                window.ExpandForPreview();
+                window.UpdateLayout();
+                var stops = Descendants(window).OfType<FrameworkElement>()
+                    .Where(e => e.Focusable && e.IsVisible && System.Windows.Input.KeyboardNavigation.GetIsTabStop(e) && e is not System.Windows.Controls.ScrollViewer)
+                    .ToList();
+                Check(stops.Count > 3, $"{page}: keyboard can reach the controls ({stops.Count})");
+                var unnamed = stops.Where(e => e is not TextBox && string.IsNullOrWhiteSpace(System.Windows.Automation.AutomationProperties.GetName(e))
+                    && string.IsNullOrWhiteSpace((e as ContentControl)?.Content as string)).ToList();
+                Check(unnamed.Count == 0, $"{page}: {unnamed.Count} controls without a name, e.g. {unnamed.FirstOrDefault()?.GetType().Name}");
+            }
+            log.Add("ok keyboard access (every settings page)");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            yield return child;
+            foreach (var d in Descendants(child))
+                yield return d;
+        }
     }
 
     /// <summary>Runs the dispatcher (async continuations, the watcher's callbacks) until done or timed out.</summary>

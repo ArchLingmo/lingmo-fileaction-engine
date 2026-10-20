@@ -121,6 +121,8 @@ internal sealed class PresetDialog : Window
 
         var save = Button(T("Uložit", "Save"), () => DialogResult = true, primary: true, glyph: "");
         var cancel = Button(T("Zrušit", "Cancel"), () => DialogResult = false);
+        save.IsDefault = true;
+        cancel.IsCancel = true;
         cancel.Margin = new Thickness(8, 0, 0, 0);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 20, 0, 0) };
         buttons.Children.Add(save);
@@ -209,7 +211,7 @@ internal sealed class PresetDialog : Window
         {
             changed(v);
             Dispatcher.BeginInvoke(Rebuild, System.Windows.Threading.DispatcherPriority.Background);
-        });
+        }, label);
         DockPanel.SetDock(toggle, Dock.Right);
         row.Children.Add(toggle);
         var text = Text(label, 14);

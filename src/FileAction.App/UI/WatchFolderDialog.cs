@@ -107,7 +107,7 @@ internal sealed class WatchFolderDialog : Window
         });
 
         var subfolders = new DockPanel { Margin = new Thickness(0, 16, 0, 0) };
-        var toggle = Toggle(_folder.IncludeSubfolders, v => _folder.IncludeSubfolders = v);
+        var toggle = Toggle(_folder.IncludeSubfolders, v => _folder.IncludeSubfolders = v, T("Včetně podsložek", "Include subfolders"));
         DockPanel.SetDock(toggle, Dock.Right);
         subfolders.Children.Add(toggle);
         subfolders.Children.Add(Text(T("Včetně podsložek", "Include subfolders"), 14));
@@ -117,6 +117,8 @@ internal sealed class WatchFolderDialog : Window
         root.Children.Add(_error);
         var save = Button(T("Uložit", "Save"), Save, primary: true, glyph: "");
         var cancel = Button(T("Zrušit", "Cancel"), () => DialogResult = false);
+        save.IsDefault = true;
+        cancel.IsCancel = true;
         cancel.Margin = new Thickness(8, 0, 0, 0);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
         buttons.Children.Add(save);
@@ -133,7 +135,7 @@ internal sealed class WatchFolderDialog : Window
         _scroll.ScrollToVerticalOffset(offset);
     }
 
-    private Border Chip(string name, bool active, int index)
+    private FrameworkElement Chip(string name, bool active, int index)
     {
         var chip = new Border
         {
@@ -146,12 +148,14 @@ internal sealed class WatchFolderDialog : Window
             Cursor = Cursors.Hand,
             Child = Text(name, 13, active ? FontWeights.SemiBold : FontWeights.Normal, active ? Theme.TextOnAccent : Theme.Text, wrap: false),
         };
-        chip.MouseLeftButtonUp += (_, _) =>
+        var button = Clickable(chip, name, () =>
         {
             _group = index;
             Rebuild();
-        };
-        return chip;
+        });
+        if (active)
+            System.Windows.Automation.AutomationProperties.SetItemStatus(button, T("vybráno", "selected"));
+        return button;
     }
 
     private UIElement OperationRow(Operation op, bool separator)
@@ -182,12 +186,15 @@ internal sealed class WatchFolderDialog : Window
             Cursor = Cursors.Hand,
             Child = row,
         };
-        item.MouseLeftButtonUp += (_, _) =>
+        var button = Clickable(item, op.Label + (string.IsNullOrEmpty(op.Subtitle) ? "" : ", " + op.Subtitle), () =>
         {
             _folder.OperationId = op.Id;
             Rebuild();
-        };
-        return item;
+        });
+        button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        if (selected)
+            System.Windows.Automation.AutomationProperties.SetItemStatus(button, T("vybráno", "selected"));
+        return button;
     }
 
     private void Pick()

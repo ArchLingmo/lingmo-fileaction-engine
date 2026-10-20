@@ -238,3 +238,62 @@ public class MediaProbeTests
         Assert.DoesNotContain("-vn", args);
     }
 }
+
+public class PrivacyAndSizeTests
+{
+    [Fact]
+    public async Task Conversion_removes_the_gps_position_but_keeps_other_exif()
+    {
+        var dir = OutputPaths.TempDirectory();
+        try
+        {
+            var jpg = Path.Combine(dir, "photo.jpg");
+            using (var image = new MagickImage("plasma:", 200, 100))
+            {
+                var exif = new ExifProfile();
+                exif.SetValue(ExifTag.Make, "TestCam");
+                exif.SetValue(ExifTag.GPSLatitudeRef, "N");
+                exif.SetValue(ExifTag.GPSLatitude, [new Rational(50, 1), new Rational(5, 1), new Rational(0, 1)]);
+                image.SetProfile(exif);
+                image.Write(jpg, MagickFormat.Jpeg);
+            }
+            var webp = Path.Combine(dir, "photo.webp");
+            await ImageBackend.ConvertAsync(jpg, webp, "webp", new Settings(), default);
+            using var result = new MagickImage(webp);
+            var kept = result.GetExifProfile();
+            Assert.NotNull(kept);
+            Assert.Null(kept!.GetValue(ExifTag.GPSLatitude));
+            Assert.Equal("TestCam", kept.GetValue(ExifTag.Make)?.Value);
+
+            var keep = Path.Combine(dir, "keep.webp");
+            await ImageBackend.ConvertAsync(jpg, keep, "webp", new Settings { StripLocation = false }, default);
+            using var withGps = new MagickImage(keep);
+            Assert.NotNull(withGps.GetExifProfile()?.GetValue(ExifTag.GPSLatitude));
+        }
+        finally
+        {
+            OutputPaths.TryDelete(dir);
+        }
+    }
+
+    [Fact]
+    public async Task Icons_are_small()
+    {
+        var dir = OutputPaths.TempDirectory();
+        try
+        {
+            var png = Path.Combine(dir, "logo.png");
+            using (var image = new MagickImage("plasma:", 600, 200))
+                image.Write(png, MagickFormat.Png);
+            var ico = Path.Combine(dir, "logo.ico");
+            await ImageBackend.ConvertAsync(png, ico, "ico", new Settings(), default);
+            Assert.True(new FileInfo(ico).Length < 200_000, $"{new FileInfo(ico).Length} bytes");
+            using var icon = new MagickImageCollection(ico);
+            Assert.All(icon, frame => Assert.Equal(frame.Width, frame.Height));
+        }
+        finally
+        {
+            OutputPaths.TryDelete(dir);
+        }
+    }
+}

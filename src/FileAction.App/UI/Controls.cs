@@ -1,5 +1,7 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -62,6 +64,7 @@ internal static class Controls
         }
         if (control is FrameworkElement fe)
         {
+            NameControl(fe, title);
             fe.VerticalAlignment = VerticalAlignment.Center;
             fe.Margin = new Thickness(16, 0, 0, 0);
             DockPanel.SetDock(fe, Dock.Right);
@@ -86,19 +89,95 @@ internal static class Controls
         };
     }
 
-    /// <summary>A row of mutually exclusive pills; the active one is filled with the accent gradient.</summary>
+    // ------------------------------------------------------------------ keyboard and screen readers
+    //
+    // The controls below draw themselves, but each one is a real WPF button, toggle or radio button
+    // underneath (with an empty template), so Tab reaches it, Enter/Space/arrows work, a focus ring shows
+    // for keyboard users only, and screen readers announce the right role, name and state.
+
+    private static readonly ControlTemplate PlainTemplate = CreatePlainTemplate();
+
+    private static ControlTemplate CreatePlainTemplate()
+    {
+        var template = new ControlTemplate(typeof(ContentControl));
+        template.VisualTree = new FrameworkElementFactory(typeof(ContentPresenter));
+        template.Seal();
+        return template;
+    }
+
+    /// <summary>The keyboard focus ring: an accent outline just outside the control.</summary>
+    public static Style FocusRing { get; } = CreateFocusRing();
+
+    private static Style CreateFocusRing()
+    {
+        var border = new FrameworkElementFactory(typeof(Border));
+        border.SetValue(Border.BorderThicknessProperty, new Thickness(2));
+        border.SetValue(Border.BorderBrushProperty, Theme.Accent);
+        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(9));
+        border.SetValue(FrameworkElement.MarginProperty, new Thickness(-3));
+        var template = new ControlTemplate(typeof(Control)) { VisualTree = border };
+        var style = new Style(typeof(Control));
+        style.Setters.Add(new Setter(Control.TemplateProperty, template));
+        style.Seal();
+        return style;
+    }
+
+    /// <summary>
+    /// Makes <paramref name="visual"/> a real button: Tab-reachable, Enter/Space activate it, focus ring,
+    /// and <paramref name="name"/> for screen readers. Layout (margin, alignment) moves to the button.
+    /// </summary>
+    public static System.Windows.Controls.Button Clickable(FrameworkElement visual, string name, Action click)
+    {
+        var button = new System.Windows.Controls.Button();
+        Wrap(button, visual, name);
+        button.Click += (_, e) =>
+        {
+            e.Handled = true;
+            click();
+        };
+        return button;
+    }
+
+    private static void Wrap(ContentControl control, FrameworkElement visual, string name)
+    {
+        control.Template = PlainTemplate;
+        control.FocusVisualStyle = FocusRing;
+        control.Cursor = Cursors.Hand;
+        control.Background = Brushes.Transparent;
+        control.Margin = visual.Margin;
+        control.HorizontalAlignment = visual.HorizontalAlignment;
+        control.VerticalAlignment = visual.VerticalAlignment;
+        visual.Margin = new Thickness(0);
+        control.Content = visual;
+        AutomationProperties.SetName(control, name);
+    }
+
+    /// <summary>Gives an unnamed toggle, slider or choice the card's title as its accessible name.</summary>
+    private static void NameControl(FrameworkElement control, string title)
+    {
+        var target = control is StackPanel row && row.Children.Count > 0 && row.Children[0] is FrameworkElement first ? first : control;
+        if (string.IsNullOrEmpty(AutomationProperties.GetName(target)))
+            AutomationProperties.SetName(target, title);
+    }
+
+    /// <summary>A row of mutually exclusive pills; the active one is filled with the accent gradient. Arrow keys move between them.</summary>
     public static Border Segmented<T>(IReadOnlyList<(string Label, T Value)> options, T selected, Action<T> changed)
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        var pills = new List<(Border Pill, TextBlock Text, T Value)>();
+        KeyboardNavigation.SetDirectionalNavigation(panel, KeyboardNavigationMode.Cycle);
+        KeyboardNavigation.SetTabNavigation(panel, KeyboardNavigationMode.Once);
+        var group = "segmented-" + Guid.NewGuid().ToString("N");
+        var pills = new List<(Border Pill, TextBlock Text, RadioButton Radio, T Value)>();
+        var ready = false;
         void Select(T value)
         {
-            foreach (var (pill, text, v) in pills)
+            foreach (var (pill, text, radio, v) in pills)
             {
                 var on = EqualityComparer<T>.Default.Equals(v, value);
                 pill.Background = on ? Theme.AccentGradient : Brushes.Transparent;
                 text.Foreground = on ? Theme.TextOnAccent : Theme.Text;
                 text.FontWeight = on ? FontWeights.SemiBold : FontWeights.Normal;
+                radio.IsChecked = on;
             }
         }
         foreach (var (label, value) in options)
@@ -109,19 +188,23 @@ internal static class Controls
                 CornerRadius = new CornerRadius(7),
                 Padding = new Thickness(12, 5, 12, 6),
                 Background = Brushes.Transparent,
-                Cursor = Cursors.Hand,
                 Child = text,
             };
+            var radio = new RadioButton { GroupName = group };
+            Wrap(radio, pill, label);
             var v = value;
-            pill.MouseLeftButtonUp += (_, _) =>
+            radio.Checked += (_, _) =>
             {
+                if (!ready)
+                    return;
                 Select(v);
                 changed(v);
             };
-            pills.Add((pill, text, value));
-            panel.Children.Add(pill);
+            pills.Add((pill, text, radio, value));
+            panel.Children.Add(radio);
         }
         Select(selected);
+        ready = true;
         return new Border
         {
             Background = Theme.Track,
@@ -131,8 +214,8 @@ internal static class Controls
         };
     }
 
-    /// <summary>Windows 11 toggle switch.</summary>
-    public static FrameworkElement Toggle(bool value, Action<bool> changed)
+    /// <summary>Windows 11 toggle switch (Space toggles it; screen readers hear "on"/"off").</summary>
+    public static FrameworkElement Toggle(bool value, Action<bool> changed, string? name = null)
     {
         var knob = new Ellipse { Width = 12, Height = 12, HorizontalAlignment = HorizontalAlignment.Left };
         var track = new Border
@@ -141,14 +224,15 @@ internal static class Controls
             Height = 20,
             CornerRadius = new CornerRadius(10),
             BorderThickness = new Thickness(1),
-            Cursor = Cursors.Hand,
             Child = knob,
         };
         var translate = new TranslateTransform();
         knob.RenderTransform = translate;
-        var on = value;
+        var toggle = new ToggleButton { IsChecked = value };
+        Wrap(toggle, track, name ?? "");
         void Paint(bool animate)
         {
+            var on = toggle.IsChecked == true;
             track.Background = on ? Theme.AccentGradient : Brushes.Transparent;
             track.BorderBrush = on ? Brushes.Transparent : Theme.Muted;
             knob.Fill = on ? Brushes.White : Theme.Muted;
@@ -158,18 +242,18 @@ internal static class Controls
             else
                 translate.X = x;
         }
-        track.MouseLeftButtonUp += (_, _) =>
+        toggle.Click += (_, e) =>
         {
-            on = !on;
+            e.Handled = true;
             Paint(true);
-            changed(on);
+            changed(toggle.IsChecked == true);
         };
         Paint(false);
-        return track;
+        return toggle;
     }
 
-    /// <summary>A slim slider with an accent-filled track and a round thumb.</summary>
-    public static FrameworkElement Slider(int min, int max, int value, Action<int> changed, Action committed)
+    /// <summary>A slim slider with an accent-filled track and a round thumb; arrows, Page Up/Down, Home and End move it.</summary>
+    public static FrameworkElement Slider(int min, int max, int value, Action<int> changed, Action committed, string? name = null)
     {
         const double width = 200;
         var label = new TextBlock { Width = 40, FontSize = 13, Foreground = Theme.Text, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
@@ -184,10 +268,13 @@ internal static class Controls
             HorizontalAlignment = HorizontalAlignment.Left,
             Effect = Theme.Shadow(6),
         };
-        var surface = new Grid { Width = width, Height = 24, Background = Brushes.Transparent, Cursor = Cursors.Hand };
+        var surface = new Grid { Width = width, Height = 24, Background = Brushes.Transparent, Cursor = Cursors.Hand, Focusable = true, FocusVisualStyle = FocusRing };
+        KeyboardNavigation.SetIsTabStop(surface, true);
         surface.Children.Add(new Border { Height = 4, CornerRadius = new CornerRadius(2), Background = Theme.Track });
         surface.Children.Add(fill);
         surface.Children.Add(thumb);
+        if (name is not null)
+            AutomationProperties.SetName(surface, name);
 
         var current = value;
         void Show()
@@ -196,19 +283,21 @@ internal static class Controls
             fill.Width = Math.Max(0, t * width);
             thumb.Margin = new Thickness(t * (width - 18), 0, 0, 0);
             label.Text = current.ToString();
+            AutomationProperties.SetItemStatus(surface, current.ToString());
         }
-        void SetFrom(Point p)
+        void Set(int v)
         {
-            var t = Math.Clamp((p.X - 9) / (width - 18), 0, 1);
-            var v = (int)Math.Round(min + t * (max - min));
+            v = Math.Clamp(v, min, max);
             if (v == current)
                 return;
             current = v;
             Show();
             changed(v);
         }
+        void SetFrom(Point p) => Set((int)Math.Round(min + Math.Clamp((p.X - 9) / (width - 18), 0, 1) * (max - min)));
         surface.MouseLeftButtonDown += (_, e) =>
         {
+            surface.Focus();
             surface.CaptureMouse();
             SetFrom(e.GetPosition(surface));
         };
@@ -222,6 +311,37 @@ internal static class Controls
             surface.ReleaseMouseCapture();
             committed();
         };
+        var big = Math.Max(1, (max - min) / 10);
+        surface.KeyDown += (_, e) =>
+        {
+            var before = current;
+            switch (e.Key)
+            {
+                case Key.Left or Key.Down:
+                    Set(current - 1);
+                    break;
+                case Key.Right or Key.Up:
+                    Set(current + 1);
+                    break;
+                case Key.PageDown:
+                    Set(current - big);
+                    break;
+                case Key.PageUp:
+                    Set(current + big);
+                    break;
+                case Key.Home:
+                    Set(min);
+                    break;
+                case Key.End:
+                    Set(max);
+                    break;
+                default:
+                    return;
+            }
+            e.Handled = true;
+            if (current != before)
+                committed();
+        };
         Show();
 
         var row = new StackPanel { Orientation = Orientation.Horizontal };
@@ -231,7 +351,7 @@ internal static class Controls
     }
 
     /// <summary>A rounded button; <paramref name="primary"/> ones use the accent gradient.</summary>
-    public static Border Button(string text, Action click, bool primary = false, string? glyph = null)
+    public static System.Windows.Controls.Button Button(string text, Action click, bool primary = false, string? glyph = null)
     {
         var content = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
         var foreground = primary ? Theme.TextOnAccent : Theme.Text;
@@ -248,25 +368,19 @@ internal static class Controls
             });
         }
         content.Children.Add(new TextBlock { Text = text, FontSize = 13, Foreground = foreground, FontWeight = primary ? FontWeights.SemiBold : FontWeights.Normal, VerticalAlignment = VerticalAlignment.Center });
-        var normal = primary ? Theme.AccentGradient : Theme.Card;
-        var button = new Border
+        var visual = new Border
         {
-            Background = normal,
+            Background = primary ? Theme.AccentGradient : Theme.Card,
             BorderBrush = primary ? Brushes.Transparent : Theme.PanelBorder,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(14, 6, 14, 7),
-            Cursor = Cursors.Hand,
             Child = content,
             HorizontalAlignment = HorizontalAlignment.Left,
         };
-        button.MouseEnter += (_, _) => button.Opacity = 0.88;
-        button.MouseLeave += (_, _) => button.Opacity = 1;
-        button.MouseLeftButtonUp += (_, e) =>
-        {
-            e.Handled = true;
-            click();
-        };
+        var button = Clickable(visual, text.TrimEnd('…', '.'), click);
+        button.MouseEnter += (_, _) => visual.Opacity = 0.88;
+        button.MouseLeave += (_, _) => visual.Opacity = 1;
         return button;
     }
 

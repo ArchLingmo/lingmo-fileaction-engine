@@ -52,8 +52,12 @@ public static partial class FfmpegBackend
         var args = CodecArgs(format, s).ToList();
         if (format == "gif")
         {
+            // Portrait clips fit into 640 px too; longer clips get smaller and slower, or the GIF outweighs the video.
+            var size = info.Duration is > 10 ? 480 : 640;
             var i = args.IndexOf("-vf") + 1;
-            args[i] = args[i].Replace("scale='min(640,iw)':-2", "scale='if(gt(iw,ih),min(640,iw),-2)':'if(gt(iw,ih),-2,min(640,ih))'");
+            args[i] = args[i].Replace("scale='min(640,iw)':-2", $"scale='if(gt(iw,ih),min({size},iw),-2)':'if(gt(iw,ih),-2,min({size},ih))'");
+            if (info.Duration is > 10)
+                args[i] = args[i].Replace("fps=12", "fps=10");
         }
         if (info.Hdr && toneMap && args.IndexOf("-vf") is var vf and >= 0 && format != "gif")
         {

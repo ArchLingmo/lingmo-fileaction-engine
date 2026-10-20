@@ -57,6 +57,26 @@ public static class ImageBackend
         }
     }
 
+    /// <summary>
+    /// Removes where a photo was taken (EXIF GPS, and XMP when it holds a position); everything else in the
+    /// metadata stays.
+    /// </summary>
+    public static void RemoveLocation(MagickImage image)
+    {
+        if (image.GetExifProfile() is { } exif)
+        {
+            var gps = exif.Values.Where(v => v.Tag.ToString().StartsWith("GPS", StringComparison.Ordinal)).Select(v => v.Tag).ToList();
+            if (gps.Count > 0)
+            {
+                foreach (var tag in gps)
+                    exif.RemoveValue(tag);
+                image.SetProfile(exif);
+            }
+        }
+        if (image.GetXmpProfile() is { } xmp && System.Text.Encoding.UTF8.GetString(xmp.ToByteArray()).Contains("GPS", StringComparison.Ordinal))
+            image.RemoveProfile("xmp");
+    }
+
     /// <summary>True for a GIF/WebP with more than one frame.</summary>
     public static bool IsAnimated(string path)
     {
@@ -77,6 +97,11 @@ public static class ImageBackend
 
     private static void Save(IMagickImage<byte> image, string output, MagickFormat format)
     {
+        if (format == MagickFormat.Ico)
+        {
+            SaveIcon(image, output);
+            return;
+        }
         using var stream = File.Create(output);
         image.Write(stream, format);
     }
@@ -85,6 +110,44 @@ public static class ImageBackend
     {
         using var stream = File.Create(output);
         images.Write(stream, format);
+    }
+
+    /// <summary>
+    /// An .ico with every size stored as PNG (supported since Windows Vista): a few dozen KB instead of the
+    /// ~370 KB of raw bitmaps ImageMagick writes. Sizes above the picture's own are left out.
+    /// </summary>
+    private static void SaveIcon(IMagickImage<byte> image, string output)
+    {
+        var side = Math.Max(image.Width, image.Height);
+        var sizes = new uint[] { 256, 128, 64, 48, 32, 16 }.Where(s => s <= Math.Max(16, Math.Min(side, 256u))).ToList();
+        var layers = new List<(uint Size, byte[] Png)>();
+        foreach (var size in sizes)
+        {
+            using var layer = image.Clone();
+            layer.Resize(new MagickGeometry(size, size) { IgnoreAspectRatio = true });
+            layer.Strip();
+            layers.Add((size, layer.ToByteArray(MagickFormat.Png32)));
+        }
+        using var file = File.Create(output);
+        using var writer = new BinaryWriter(file);
+        writer.Write((ushort)0);      // reserved
+        writer.Write((ushort)1);      // type: icon
+        writer.Write((ushort)layers.Count);
+        var offset = 6 + 16 * layers.Count;
+        foreach (var (size, png) in layers)
+        {
+            writer.Write((byte)(size >= 256 ? 0 : size)); // 0 means 256
+            writer.Write((byte)(size >= 256 ? 0 : size));
+            writer.Write((byte)0);    // palette colours
+            writer.Write((byte)0);    // reserved
+            writer.Write((ushort)1);  // colour planes
+            writer.Write((ushort)32); // bits per pixel
+            writer.Write(png.Length);
+            writer.Write(offset);
+            offset += png.Length;
+        }
+        foreach (var (_, png) in layers)
+            writer.Write(png);
     }
 
     /// <summary>Animated output: GIF frames are re-optimised (only the changing parts are stored).</summary>
@@ -162,12 +225,14 @@ public static class ImageBackend
             }
             using var image = Load(input);
             ct.ThrowIfCancellationRequested();
+            if (settings.StripLocation)
+                RemoveLocation(image);
             PrepareFor(image, format, QualityFor(image, format, settings.JpegQuality));
             Save(image, output, ToMagickFormat(format));
         }, ct);
 
     /// <summary>Applies <paramref name="edit"/> and saves in the source format (every frame of an animation).</summary>
-    public static Task EditAsync(string input, string output, Action<MagickImage> edit, int? quality, CancellationToken ct) =>
+    public static Task EditAsync(string input, string output, Action<MagickImage> edit, int? quality, CancellationToken ct, bool stripLocation = false) =>
         Task.Run(() =>
         {
             var format = OutputFormatFor(Formats.KeyOf(input));
@@ -185,6 +250,8 @@ public static class ImageBackend
             }
             using var image = Load(input);
             var q = QualityFor(image, format, quality ?? 92);
+            if (stripLocation)
+                RemoveLocation(image);
             edit(image);
             ct.ThrowIfCancellationRequested();
             PrepareFor(image, format, q);
@@ -247,7 +314,7 @@ public static class ImageBackend
 
     /// <summary>A user preset: optional resize, grayscale and metadata removal, saved in <paramref name="format"/>.</summary>
     public static Task PresetAsync(string input, string output, string format, int quality, int? maxSide, int? percent,
-        bool grayscale, bool strip, CancellationToken ct) =>
+        bool grayscale, bool strip, CancellationToken ct, bool stripLocation = false) =>
         Task.Run(() =>
         {
             void Apply(MagickImage image)
@@ -260,6 +327,8 @@ public static class ImageBackend
                     Grayscale(image);
                 if (strip)
                     StripMetadata(image);
+                else if (stripLocation)
+                    RemoveLocation(image);
             }
 
             if (format is "gif" or "webp" && IsAnimated(input))

@@ -133,16 +133,16 @@ internal sealed class JobCard : Border
             VerticalAlignment = VerticalAlignment.Top,
             ToolTip = T("Zavřít", "Close"),
         };
-        close.MouseLeftButtonUp += (_, _) =>
+        var closeButton = UI.Controls.Clickable(close, T("Zavřít", "Close"), () =>
         {
             if (!_done)
                 _cancel();
             _remove(this);
-        };
+        });
 
         var head = new DockPanel();
-        DockPanel.SetDock(close, Dock.Right);
-        head.Children.Add(close);
+        DockPanel.SetDock(closeButton, Dock.Right);
+        head.Children.Add(closeButton);
         head.Children.Add(titleText);
 
         var body = new StackPanel();
@@ -282,7 +282,7 @@ internal sealed class JobCard : Border
         _badgeHost.Visibility = Visibility.Visible;
     }
 
-    private void AddButton(Border button)
+    private void AddButton(FrameworkElement button)
     {
         if (_buttons.Children.Count > 0)
             button.Margin = new Thickness(8, 0, 0, 0);

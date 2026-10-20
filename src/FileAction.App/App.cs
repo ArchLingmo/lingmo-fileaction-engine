@@ -112,7 +112,7 @@ internal sealed class App : Application
             _settings.FirstRunDone = true;
             _settings.Save();
             TryIntegrateOnFirstRun();
-            OpenSettings();
+            SettingsWindow.ShowSingle(_settings, _tools, OnSettingsChanged, SettingsPage.Gestures, welcome: true);
         }
         else if (_args.Contains("--updated"))
         {

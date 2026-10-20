@@ -56,7 +56,7 @@ public static class Catalog
         ImageTool(ops, "image.max1920", "Max 1920 px", Glyphs.Shrink, "1920", (item, ctx, tmp) =>
             ImageBackend.FitsWithin(item.Path, 1920)
                 ? throw new ConversionException(T("Obrázek už je menší než 1920 px, nic se nezměnilo.", "The image is already smaller than 1920 px; nothing to change."), nothingToDo: true)
-                : ImageBackend.EditAsync(item.Path, tmp, img => ImageBackend.ResizeMax(img, 1920), ctx.Settings.JpegQuality, ctx.CancellationToken),
+                : ImageBackend.EditAsync(item.Path, tmp, img => ImageBackend.ResizeMax(img, 1920), ctx.Settings.JpegQuality, ctx.CancellationToken, ctx.Settings.StripLocation),
             subtitle: T("na web", "for web"));
         ImageEdit(ops, "image.rotate.right", T("Otočit", "Rotate"), Glyphs.Rotate, T("doprava", "right"), T("otočeno", "rotated"), img => img.Rotate(90));
         ImageEdit(ops, "image.rotate.left", T("Otočit", "Rotate"), Glyphs.Rotate, T("doleva", "left"), T("otočeno", "rotated"), img => img.Rotate(-90));
@@ -76,7 +76,7 @@ public static class Catalog
                 ImageBackend.OutputFormatFor(item.Format), tmp => run(item, ctx, tmp))], subtitle: subtitle));
 
     private static void ImageEdit(List<Operation> ops, string id, string label, string glyph, string? subtitle, string suffix, Action<ImageMagick.MagickImage> edit) =>
-        ImageTool(ops, id, label, glyph, suffix, (item, ctx, tmp) => ImageBackend.EditAsync(item.Path, tmp, edit, ctx.Settings.JpegQuality, ctx.CancellationToken), subtitle);
+        ImageTool(ops, id, label, glyph, suffix, (item, ctx, tmp) => ImageBackend.EditAsync(item.Path, tmp, edit, ctx.Settings.JpegQuality, ctx.CancellationToken, ctx.Settings.StripLocation), subtitle);
 
     // ---------------------------------------------------------------- audio
 

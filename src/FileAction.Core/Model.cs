@@ -91,6 +91,9 @@ public sealed class Settings
     public int PdfDpi { get; set; } = 300;
     public int VideoCrf { get; set; } = 23;
     public int CompressVideoCrf { get; set; } = 28;
+
+    /// <summary>Remove the GPS position from photos that are converted or edited (they are usually shared).</summary>
+    public bool StripLocation { get; set; } = true;
 }
 
 public abstract class Operation

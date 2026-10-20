@@ -135,7 +135,7 @@ internal sealed partial class SettingsWindow
                 {
                     f.Enabled = v;
                     Save();
-                });
+                }, T($"Sledovat {f.Path}", $"Watch {f.Path}"));
                 toggle.VerticalAlignment = VerticalAlignment.Center;
                 toggle.Margin = new Thickness(0, 0, 14, 0);
                 actions.Children.Add(toggle);

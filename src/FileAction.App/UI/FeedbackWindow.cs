@@ -26,7 +26,7 @@ internal sealed class FeedbackWindow : Window
     private readonly TextBox _message = Box(multiline: true);
     private readonly TextBox _email = Box(multiline: false);
     private readonly TextBlock _status = Text("", 13, wrap: true);
-    private readonly Border _send;
+    private readonly System.Windows.Controls.Button _send;
     private string _kind = "bug";
     private const int MaxImages = 3;
     private const int MaxBytes = 2_400_000;   // the server takes 2.5 MB per image
@@ -104,8 +104,7 @@ internal sealed class FeedbackWindow : Window
         var web = Text(T("Nebo na webu: ", "Or on the web: ") + "fileaction.apexpiksel.cz/#feedback", 12, brush: Theme.Muted);
         web.Margin = new Thickness(0, 14, 0, 0);
         web.Cursor = Cursors.Hand;
-        web.MouseLeftButtonUp += (_, _) => Shell.Updater.Open(Website + "/#feedback");
-        root.Children.Add(web);
+        root.Children.Add(Clickable(web, T("Formulář na webu", "Form on the website"), () => Shell.Updater.Open(Website + "/#feedback")));
 
         Content = root;
         KeyDown += (_, e) =>
@@ -243,12 +242,11 @@ internal sealed class FeedbackWindow : Window
             ToolTip = T("Odebrat", "Remove"),
             Child = new TextBlock { Text = "\uE711", FontFamily = Theme.Icons, FontSize = 9, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
         };
-        remove.MouseLeftButtonUp += (_, _) =>
+        thumb.Children.Add(Clickable(remove, T("Odebrat obrázek", "Remove picture"), () =>
         {
             _images.Remove(image);
             _thumbs.Children.Remove(thumb);
-        };
-        thumb.Children.Add(remove);
+        }));
         _thumbs.Children.Add(thumb);
         _status.Text = "";
     }

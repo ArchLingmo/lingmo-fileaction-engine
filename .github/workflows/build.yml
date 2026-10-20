@@ -136,6 +136,37 @@ jobs:
           $setup = Get-Item "artifacts/FileAction-Setup-$env:VERSION.exe"
           if ($setup.Length -gt 50MB) { throw ("The installer grew to {0:N1} MB (limit 50 MB)" -f ($setup.Length / 1MB)) }
 
+      # Code signing through SignPath (free for open source). Runs once the repository variable
+      # SIGNPATH_ORGANIZATION_ID and the secret SIGNPATH_API_TOKEN exist; see packaging/signing/README.md.
+      - name: Upload the unsigned installer for signing
+        id: unsigned
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installer
+          path: artifacts/FileAction-Setup-${{ env.VERSION }}.exe
+
+      - name: Sign the installer
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: fileaction
+          signing-policy-slug: release-signing
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Use the signed installer
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        shell: pwsh
+        run: |
+          Copy-Item signed/*.exe artifacts/ -Force
+          $sig = Get-AuthenticodeSignature "artifacts/FileAction-Setup-$env:VERSION.exe"
+          if ($sig.Status -ne 'Valid') { throw "The installer is not validly signed: $($sig.Status)" }
+          "Signed by: $($sig.SignerCertificate.Subject)"
+
       - uses: actions/upload-artifact@v4
         with:
           name: FileAction-windows
@@ -313,3 +344,23 @@ jobs:
           git -c user.name="${{ github.repository_owner }}" -c user.email="${{ github.repository_owner }}@users.noreply.github.com" \
             commit -m "Update to $VERSION"
           git push origin HEAD:master
+
+  winget:
+    name: Submit to winget
+    needs: [version, release]
+    if: needs.version.outputs.publish == 'true'
+    runs-on: windows-latest
+    # Never fails the release: the first version must be accepted by hand, and the token may be missing.
+    continue-on-error: true
+    steps:
+      - name: Update the winget manifest
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+        shell: pwsh
+        run: |
+          # WINGET_TOKEN: a classic personal access token with the public_repo scope (see packaging/winget/README.md).
+          if (-not $env:WINGET_TOKEN) { Write-Host "No WINGET_TOKEN secret: skipping winget."; exit 0 }
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          $url = "https://github.com/${{ github.repository }}/releases/download/v$env:VERSION/FileAction-Setup-$env:VERSION.exe"
+          .\wingetcreate.exe update Metamorfolog.FileAction --version $env:VERSION --urls $url --submit --token $env:WINGET_TOKEN
