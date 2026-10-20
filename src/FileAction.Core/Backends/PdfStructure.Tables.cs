@@ -49,28 +49,74 @@ public static partial class PdfStructure
     /// Finds the tables on a page. Conservative on purpose: a missed table still reads as text, while a
     /// paragraph or a list wrongly turned into a table is mangled.
     /// </summary>
-    private static List<PageTable> FindTables(Page page, IReadOnlyList<Word> words)
+    /// <param name="continued">A table from the previous page may go on here: a single ruled row at the top is
+    /// then enough (the rest of a statement whose last row moved to a new page).</param>
+    private static List<PageTable> FindTables(Page page, IReadOnlyList<Word> words, bool continued = false)
     {
         var tables = new List<PageTable>();
         if (words.Count < 4)
             return tables;
         var (horizontal, vertical) = Rulings(page);
         var region = new List<Line>();
+        var loose = new List<Line>();
         foreach (var line in SplitAtColumns(Lines(words, vertical)))
         {
             if (region.Count > 0 && !Fits(region, line, horizontal))
             {
-                if (BuildTable(region, horizontal) is { } table)
+                if (BuildTable(region, horizontal, continued && tables.Count == 0) is { } table)
                     tables.Add(table);
                 region.Clear();
             }
             // A table starts with a line that has cells; lines without them only join a started table.
-            if (region.Count > 0 || line.IsRow)
+            if (region.Count > 0)
+            {
                 region.Add(line);
+            }
+            else if (line.IsRow)
+            {
+                region.AddRange(CellLinesAbove(loose, line, horizontal, continued && tables.Count == 0));
+                region.Add(line);
+                loose.Clear();
+            }
+            else
+            {
+                loose.Add(line);
+            }
         }
-        if (region.Count > 0 && BuildTable(region, horizontal) is { } last)
+        if (region.Count > 0 && BuildTable(region, horizontal, continued && tables.Count == 0) is { } last)
             tables.Add(last);
         return tables;
+    }
+
+    /// <summary>
+    /// Lines just above a ruled table's first row that belong to it: a wrapped description set above the row's
+    /// vertically centred numbers (inside the same ruled box), and on a page that continues a table, the rest of
+    /// a row the page break cut (boxed by rules of its own).
+    /// </summary>
+    private static List<Line> CellLinesAbove(List<Line> loose, Line first, List<Rule> horizontal, bool continued)
+    {
+        var taken = new List<Line>();
+        var left = first.Segments[0].Left - 1;
+        var right = first.Segments[^1].Right + 1;
+        var below = first;
+        for (var i = loose.Count - 1; i >= 0; i--)
+        {
+            var line = loose[i];
+            var size = Math.Max(line.Size, below.Size);
+            if (line.Segments[0].Left < left || line.Segments[^1].Right > right || !RuleBetween(horizontal, line.Baseline + 4 * size, line.Baseline, left, right))
+                break;
+            var ruled = RuleBetween(horizontal, line.Baseline, below.Baseline, left, right);
+            if (!ruled && line.Baseline - below.Baseline <= 1.45 * size)
+            {
+                taken.Insert(0, line);
+                below = line;
+                continue;
+            }
+            if (ruled && continued && line.Baseline - below.Baseline <= 4 * size && i == 0)
+                taken.Insert(0, line);
+            break;
+        }
+        return taken;
     }
 
     private static double Baseline(Word word) => word.Letters[0].StartBaseLine.Y;
@@ -213,7 +259,9 @@ public static partial class PdfStructure
 
         if (line.IsRow)
         {
-            var hits = line.Segments.Select(s => columns.Count(c => Overlaps(s, c))).ToList();
+            // Wrapped lines count too: a description may sit only on its own lines, above the row's numbers.
+            var all = Columns(region.SelectMany(l => l.Segments));
+            var hits = line.Segments.Select(s => all.Count(c => Overlaps(s, c))).ToList();
             // A cell spanning two columns means the lines do not share the grid (e.g. a justified paragraph).
             if (hits.Any(n => n > 1) || hits.Count(n => n == 1) < 2)
                 return false;
@@ -222,21 +270,30 @@ public static partial class PdfStructure
         }
 
         // A single segment is a wrapped line of a cell: close below, inside one column, aligned with that column.
+        // Inside means between the neighbouring columns: a description is often wider than its header.
         var segment = line.Segments[0];
         if (!ruled && distance > 1.45 * size)
             return false;
-        var column = columns.Where(c => Overlaps(segment, c)).ToList();
-        if (column.Count != 1)
+        var zones = Enumerable.Range(0, columns.Count)
+            .Select(c => (Left: c == 0 ? double.MinValue : columns[c - 1].Right, Right: c == columns.Count - 1 ? double.MaxValue : columns[c + 1].Left))
+            .Where(z => segment.Left > z.Left - 1 && segment.Right < z.Right + 1)
+            .ToList();
+        if (zones.Count == 0)
             return false;
-        return region.SelectMany(l => l.Segments).Where(s => Overlaps(s, column[0])).Any(s =>
-            Math.Abs(s.Left - segment.Left) <= 2 || Math.Abs(s.Right - segment.Right) <= 2 || Math.Abs(s.Center - segment.Center) <= 2);
+        // Between ruling lines (one above, one close below) the rules say where the cell is, so any line inside one
+        // column belongs (a wrapped description above the row's vertically centred numbers).
+        if (ruled && RuleBetween(horizontal, line.Baseline, line.Baseline - 4 * size, columns[0].Left, columns[^1].Right))
+            return true;
+        // A segment in the gap between two columns fits both zones; the aligned text decides.
+        return zones.Any(zone => region.SelectMany(l => l.Segments).Where(s => s.Left > zone.Left - 1 && s.Right < zone.Right + 1).Any(s =>
+            Math.Abs(s.Left - segment.Left) <= 2 || Math.Abs(s.Right - segment.Right) <= 2 || Math.Abs(s.Center - segment.Center) <= 2));
     }
 
     /// <summary>Checks that the collected lines really are a table and renders it as a pipe table, or returns null.</summary>
-    private static PageTable? BuildTable(List<Line> region, List<Rule> horizontal)
+    private static PageTable? BuildTable(List<Line> region, List<Rule> horizontal, bool continued = false)
     {
         var anchors = region.Where(l => l.IsRow).ToList();
-        if (anchors.Count < 2)
+        if (anchors.Count < (continued ? 1 : 2))
             return null;
         var segments = region.SelectMany(l => l.Segments).ToList();
         var columns = Columns(segments);
@@ -251,6 +308,10 @@ public static partial class PdfStructure
         // Without rules, two lines are too weak a hint: a letterhead with an address and a date, or two lines of
         // justified text whose wide word gaps happen to line up.
         if (!ruled && anchors.Count < 3)
+            return null;
+        // A lone row continuing a table: boxed by rules above and below.
+        if (anchors.Count == 1 && !(RuleBetween(horizontal, region[0].Baseline + 3 * region[0].Size, region[0].Baseline, left, right)
+                                     && RuleBetween(horizontal, region[^1].Baseline, region[^1].Baseline - 3 * region[^1].Size, left, right)))
             return null;
 
         var rows = new List<List<Line>>();
@@ -267,7 +328,7 @@ public static partial class PdfStructure
         // Every column is used by at least two rows; otherwise the grid is an accident.
         for (var c = 0; c < columns.Count; c++)
         {
-            if (rows.Count(r => r.Any(l => l.Segments.Any(s => ColumnOf(s) == c))) < 2)
+            if (rows.Count(r => r.Any(l => l.Segments.Any(s => ColumnOf(s) == c))) < Math.Min(2, rows.Count))
                 return null;
         }
 

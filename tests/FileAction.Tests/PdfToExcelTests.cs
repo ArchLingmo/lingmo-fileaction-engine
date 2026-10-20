@@ -24,19 +24,9 @@ public class PdfToExcelTests : IClassFixture<PdfToExcelTests.Samples>
             if (!Tools.Has(ExternalTool.LibreOffice))
                 return;
             var ctx = new OperationContext { Tools = Tools };
-            var statement = new StringBuilder();
-            statement.Append("<h2>Výpis z účtu 2026/10</h2><p>Majitel účtu: Řehoř Ůna</p><table border=\"1\" cellpadding=\"3\" cellspacing=\"0\">");
-            statement.Append("<thead><tr><th>Datum</th><th>Popis</th><th>Částka</th><th>Zůstatek</th></tr></thead><tbody>");
-            var balance = 25000.0;
-            for (var i = 1; i <= 70; i++)
-            {
-                var amount = i % 5 == 0 ? 3500.25 : -(i * 37.5 + 0.4);
-                balance += amount;
-                statement.Append($"<tr><td>{1 + i % 28}.10.2026</td><td>{(amount > 0 ? "Příchozí platba – výplata" : $"Platba kartou Žabka č. {i}")}</td>"
-                    + $"<td>{Czech(amount)}</td><td>{Czech(balance)}</td></tr>");
-            }
-            statement.Append("</tbody></table><p>Konec výpisu.</p>");
-            Pdfs["statement"] = Make(ctx, "vypis", statement.ToString());
+            Pdfs["statement"] = Make(ctx, "vypis", Statement(repeatHeader: true));
+            // Header printed once: the last rows may land on a new page with nothing to recognise them by.
+            Pdfs["statement-once"] = Make(ctx, "vypis-jednou", Statement(repeatHeader: false));
 
             Pdfs["invoice"] = Make(ctx, "faktura", """
                 <h1>Faktura 2026-0147</h1>
@@ -61,6 +51,24 @@ public class PdfToExcelTests : IClassFixture<PdfToExcelTests.Samples>
                 """);
 
             Pdfs["text"] = Make(ctx, "dopis", "<p>Vážený pane, děkujeme za objednávku. Příliš žluťoučký kůň úpěl ďábelské ódy.</p><p>S pozdravem</p>");
+        }
+
+        private static string Statement(bool repeatHeader)
+        {
+            var statement = new StringBuilder();
+            statement.Append("<h2>Výpis z účtu 2026/10</h2><p>Majitel účtu: Řehoř Ůna</p><table border=\"1\" cellpadding=\"3\" cellspacing=\"0\">");
+            var header = "<tr><th>Datum</th><th>Popis</th><th>Částka</th><th>Zůstatek</th></tr>";
+            statement.Append(repeatHeader ? $"<thead>{header}</thead><tbody>" : $"<tbody>{header}");
+            var balance = 25000.0;
+            for (var i = 1; i <= 70; i++)
+            {
+                var amount = i % 5 == 0 ? 3500.25 : -(i * 37.5 + 0.4);
+                balance += amount;
+                statement.Append($"<tr><td>{1 + i % 28}.10.2026</td><td>{(amount > 0 ? "Příchozí platba – výplata" : $"Platba kartou Žabka č. {i}")}</td>"
+                    + $"<td>{Czech(amount)}</td><td>{Czech(balance)}</td></tr>");
+            }
+            statement.Append("</tbody></table><p>Konec výpisu.</p>");
+            return statement.ToString();
         }
 
         private static string Czech(double value) => value.ToString("#,##0.00", System.Globalization.CultureInfo.GetCultureInfo("cs-CZ")).Replace(' ', ' ');
@@ -121,6 +129,19 @@ public class PdfToExcelTests : IClassFixture<PdfToExcelTests.Samples>
         Assert.Equal(-37.9, ws.Cell(2, 3).GetDouble(), 2);
         Assert.Equal(XLDataType.Number, ws.Cell(71, 4).DataType);
         Assert.StartsWith("Platba kartou Žabka", ws.Cell(2, 2).GetText());
+    }
+
+    [Fact]
+    public async Task Statement_with_its_header_printed_once_keeps_every_row()
+    {
+        using var book = await Convert("statement-once");
+        if (book is null)
+            return;
+        var ws = Assert.Single(book.Worksheets);
+        Assert.Equal("Datum", ws.Cell(1, 1).GetText());
+        Assert.Equal(71, ws.LastRowUsed()!.RowNumber());
+        Assert.Equal(-3019.15, ws.Cell(70, 4).GetDouble(), 2);
+        Assert.Equal(3500.25, ws.Cell(71, 3).GetDouble(), 2);
     }
 
     [Fact]

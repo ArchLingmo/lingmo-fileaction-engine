@@ -25,7 +25,7 @@ public static partial class PdfStructure
         {
             ct.ThrowIfCancellationRequested();
             var words = page.GetWords(NearestNeighbourWordExtractor.Instance).Where(w => !string.IsNullOrWhiteSpace(w.Text)).ToList();
-            var found = FindTables(page, words).OrderByDescending(t => t.Top).ToList();
+            var found = FindTables(page, words, continued: lastEndsPage && tables.Count > 0).OrderByDescending(t => t.Top).ToList();
             if (found.Count == 0)
             {
                 lastEndsPage = false;
@@ -41,9 +41,20 @@ public static partial class PdfStructure
                 if (startsPage && lastEndsPage && tables.Count > 0 && tables[^1].Rows[0].Count == table.Cells[0].Count)
                 {
                     var rows = table.Cells;
-                    if (rows.Count > 0 && rows[0].SequenceEqual(tables[^1].Rows[0]))
+                    var previous = tables[^1].Rows;
+                    if (rows.Count > 0 && rows[0].SequenceEqual(previous[0]))
                         rows = rows.Skip(1).ToList();
-                    tables[^1].Rows.AddRange(rows);
+                    // A row split by the page break: its rest (most cells empty) belongs to the last row.
+                    if (rows.Count > 0 && previous.Count > 1 && rows[0].Count(c => c.Length > 0) * 2 < rows[0].Count)
+                    {
+                        for (var c = 0; c < rows[0].Count; c++)
+                        {
+                            if (rows[0][c].Length > 0)
+                                previous[^1][c] = (previous[^1][c] + " " + rows[0][c]).Trim();
+                        }
+                        rows = rows.Skip(1).ToList();
+                    }
+                    previous.AddRange(rows);
                 }
                 else
                 {
