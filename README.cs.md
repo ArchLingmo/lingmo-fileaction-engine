@@ -61,7 +61,7 @@ Průběh převodu se ukazuje v rohu obrazovky. Odtud jde výsledek otevřít, uk
 
 **Nástroje (Ctrl):**
 - obrázky: komprimovat, zmenšit na 50 %, max. 1920 px, otočit, zrcadlit, oříznout na čtverec, černobíle, odstranit metadata (GPS, EXIF), spojit do PDF,
-- video: komprimovat (H.264), 720p, ztlumit, oříznout podle času, otočit, zrychlit 2×, náhledový snímek,
+- video: komprimovat (H.264), 720p, ztlumit, oříznout podle času, otočit, zrychlit 2×, náhledový snímek, Sony S-Log3 na běžné video, použít LUT ze souboru .cube (přetáhnout spolu s videi; datum natočení zůstane),
 - audio: komprimovat, normalizovat hlasitost, oříznout, spojit,
 - PDF: spojit, rozdělit po stranách, otočit, optimalizovat,
 - obrázky a naskenovaná PDF: **text z obrázku (OCR)** pomocí rozpoznávání vestavěného ve Windows; text se uloží jako .txt a zkopíruje do schránky,

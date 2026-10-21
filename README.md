@@ -61,7 +61,7 @@ Progress shows up in the corner of the screen, where you can open the result, sh
 
 **Tools (Ctrl):**
 - images: compress, shrink to 50 %, max 1920 px, rotate, mirror, crop to square, grayscale, strip metadata (GPS, EXIF), merge into PDF,
-- video: compress (H.264), 720p, mute, trim by time, rotate, 2× speed, thumbnail frame,
+- video: compress (H.264), 720p, mute, trim by time, rotate, 2× speed, thumbnail frame, Sony S-Log3 to normal video, apply a .cube LUT (drop it together with the videos; the recording date is kept),
 - audio: compress, normalize loudness, trim, join,
 - PDF: merge, split into pages, rotate, optimize,
 - images and scanned PDFs: **extract text (OCR)** with the recognizer built into Windows; the text is saved as .txt and copied to the clipboard,

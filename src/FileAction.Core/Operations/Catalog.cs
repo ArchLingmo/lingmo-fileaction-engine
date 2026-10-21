@@ -159,11 +159,76 @@ public static class Catalog
         Ffmpeg(ops, "video.speed2", T("Zrychlit", "Speed up"), Glyphs.Play, Formats.Video, "2×",
             (item, ctx, info, toneMap) => [.. H264(ctx.Settings.VideoCrf, "medium", "setpts=0.5*PTS", "160k", info, toneMap, subtitles: false), "-af", "atempo=2.0"],
             outputFormat: _ => "mp4", subtitle: "2×");
+        AddColorLuts(ops);
         Ffmpeg(ops, "video.thumbnail", T("Náhled", "Thumbnail"), Glyphs.Camera, Formats.Video, T("náhled", "thumbnail"),
             (item, ctx, info, toneMap) => ["-vf", (toneMap ? FfmpegBackend.ToneMap + "," : "") + "thumbnail=100", "-frames:v", "1", "-update", "1"],
             outputFormat: _ => "png", subtitle: T("snímek PNG", "PNG frame"),
             // From a tenth of the way in: many clips open on a black or fade-in frame.
             inputArgs: info => info.Duration is > 4 ? ["-ss", (info.Duration.Value * 0.1).ToString("0.###", CultureInfo.InvariantCulture)] : null);
+    }
+
+    /// <summary>
+    /// Colour LUTs: Sony S-Log3 clips (recognised by the camera's own metadata) to normal Rec.709 video, and
+    /// any .cube file dropped together with videos. The result is an 8-bit H.264 MP4 that keeps the recording
+    /// date both inside the file and on it, so photo libraries sort it with the rest of the day.
+    /// </summary>
+    private static void AddColorLuts(List<Operation> ops)
+    {
+        ops.Add(new BatchOperation("video.slog3", WheelKind.Tools, T("Z S-Logu", "From S-Log"), Glyphs.Color,
+            items => items.All(i => !i.IsDirectory && Formats.Video.Contains(i.Format) && LogVideo.Detect(i.Path) is not null),
+            (items, ctx) => GradeAsync(items, ctx, "Rec.709", (item, dir) =>
+            {
+                var cube = Path.Combine(dir, "slog3.cube");
+                File.WriteAllText(cube, LogVideo.SLog3Cube(LogVideo.Detect(item.Path)?.Gamut ?? LogVideo.Gamut.SGamut3Cine));
+                // S-Log3 is defined on legal-range BT.709 video, whatever the file says.
+                return $"scale=in_color_matrix=bt709:in_range=tv,format=gbrp16le,lut3d=file={LogVideo.FilterPath(cube)}:interp=tetrahedral";
+            }),
+            subtitle: T("Sony → běžné video", "Sony → normal video"))
+        { Requires = [ExternalTool.Ffmpeg] });
+
+        ops.Add(new BatchOperation("video.lut", WheelKind.Tools, T("Použít LUT", "Apply LUT"), Glyphs.Color,
+            items => items.Count >= 2 && items.Count(i => i.Format == "cube") == 1
+                     && items.All(i => !i.IsDirectory && (i.Format == "cube" || Formats.Video.Contains(i.Format))),
+            (items, ctx) =>
+            {
+                var lut = items.Single(i => i.Format == "cube");
+                var oneD = LogVideo.IsOneDimensional(lut.Path);
+                return GradeAsync(items.Where(i => i != lut).ToList(), ctx, lut.BaseName, (_, dir) =>
+                {
+                    // A copy with a plain name: ffmpeg's filter syntax trips over commas and brackets in paths.
+                    var cube = Path.Combine(dir, "lut.cube");
+                    File.Copy(lut.Path, cube);
+                    return $"format=gbrp16le,{(oneD ? "lut1d" : "lut3d")}=file={LogVideo.FilterPath(cube)}" + (oneD ? "" : ":interp=tetrahedral");
+                });
+            },
+            subtitle: T("soubor .cube", ".cube file"))
+        { Requires = [ExternalTool.Ffmpeg] });
+    }
+
+    private static async Task<IEnumerable<string>> GradeAsync(IReadOnlyList<FileItem> videos, OperationContext ctx, string suffix,
+        Func<FileItem, string, string> filter)
+    {
+        var outputs = new List<string>();
+        for (var i = 0; i < videos.Count; i++)
+        {
+            var item = videos[i];
+            var temp = OutputPaths.TempDirectory();
+            try
+            {
+                var info = await MediaProbe.ProbeAsync(ctx, item.Path);
+                var vf = filter(item, temp) + ",scale=out_color_matrix=bt709:out_range=tv,format=yuv420p";
+                List<string> args = [.. H264(ctx.Settings.VideoCrf, "medium", vf, "160k", info, toneMap: false),
+                    "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", "-color_range", "tv"];
+                var output = await FfmpegBackend.TransformAsync(item, suffix, ctx, ctx.SubProgress(i, videos.Count), args, "mp4", duration: info.Duration);
+                LogVideo.CopyFileDates(item.Path, output);
+                outputs.Add(output);
+            }
+            finally
+            {
+                OutputPaths.TryDelete(temp);
+            }
+        }
+        return outputs;
     }
 
     /// <summary>
