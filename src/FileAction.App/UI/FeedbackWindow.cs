@@ -20,6 +20,7 @@ namespace FileAction.App.UI;
 internal sealed class FeedbackWindow : Window
 {
     public const string Website = "https://fileaction.apexpiksel.cz";
+    public const string SupportEmail = "support@apexpiksel.cz";
     private const string Endpoint = Website + "/api/feedback";
 
     private static FeedbackWindow? _open;
@@ -105,6 +106,11 @@ internal sealed class FeedbackWindow : Window
         web.Margin = new Thickness(0, 14, 0, 0);
         web.Cursor = Cursors.Hand;
         root.Children.Add(Clickable(web, T("Formulář na webu", "Form on the website"), () => Shell.Updater.Open(Website + "/#feedback")));
+
+        var mail = Text(T("Nebo e-mailem: ", "Or by email: ") + SupportEmail, 12, brush: Theme.Muted);
+        mail.Margin = new Thickness(0, 4, 0, 0);
+        mail.Cursor = Cursors.Hand;
+        root.Children.Add(Clickable(mail, T("Napsat e-mail", "Write an email"), () => Shell.Updater.Open("mailto:" + SupportEmail)));
 
         Content = root;
         KeyDown += (_, e) =>

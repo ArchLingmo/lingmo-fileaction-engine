@@ -18,6 +18,7 @@ namespace FileAction.Linux.UI;
 public sealed class FeedbackWindow : Window
 {
     public const string Website = "https://fileaction.apexpiksel.cz";
+    public const string SupportEmail = "support@apexpiksel.cz";
     private const string Endpoint = Website + "/api/feedback";
 
     private readonly TextBox _message = TextField("", 5000, multiline: true);
@@ -74,6 +75,12 @@ public sealed class FeedbackWindow : Window
         web.Cursor = new Cursor(StandardCursorType.Hand);
         web.PointerReleased += (_, _) => Desktop.Open(Website + "/#feedback");
         _root.Children.Add(web);
+
+        var mail = Text(T("Nebo e-mailem: ", "Or by email: ") + SupportEmail, 12, brush: Palette.Muted);
+        mail.Margin = new Thickness(0, 4, 0, 0);
+        mail.Cursor = new Cursor(StandardCursorType.Hand);
+        mail.PointerReleased += (_, _) => Desktop.Open("mailto:" + SupportEmail);
+        _root.Children.Add(mail);
 
         Content = _root;
         KeyDown += (_, e) =>

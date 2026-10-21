@@ -155,7 +155,7 @@ website/                webová stránka projektu (statická)
 
 ## Zpětná vazba a podpora
 
-Našli jste chybu nebo máte nápad? Napište ji v aplikaci (**Nastavení → O aplikaci → Napsat zpětnou vazbu**, taky v nabídce ikony v oznamovací oblasti), přes [formulář na webu](https://fileaction.apexpiksel.cz/?lang=cs#feedback) nebo založte [issue](https://github.com/Metamorfolog/file_action/issues).
+Našli jste chybu nebo máte nápad? Napište ji v aplikaci (**Nastavení → O aplikaci → Napsat zpětnou vazbu**, taky v nabídce ikony v oznamovací oblasti), přes [formulář na webu](https://fileaction.apexpiksel.cz/?lang=cs#feedback), e-mailem na [support@apexpiksel.cz](mailto:support@apexpiksel.cz) nebo založte [issue](https://github.com/Metamorfolog/file_action/issues).
 
 FileAction je zdarma a zdarma zůstane. Pokud vám šetří čas, můžete jeho vývoj podpořit:
 

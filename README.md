@@ -156,7 +156,7 @@ website/                the project page (static)
 
 ## Feedback and support
 
-Found a bug or have an idea? Write it in the app (**Settings → About → Send feedback**, also in the tray icon menu), use the [form on the website](https://fileaction.apexpiksel.cz/#feedback) or open an [issue](https://github.com/Metamorfolog/file_action/issues).
+Found a bug or have an idea? Write it in the app (**Settings → About → Send feedback**, also in the tray icon menu), use the [form on the website](https://fileaction.apexpiksel.cz/#feedback), email [support@apexpiksel.cz](mailto:support@apexpiksel.cz) or open an [issue](https://github.com/Metamorfolog/file_action/issues).
 
 FileAction is free and will stay free. If it saves you time, you can support its development:
 
