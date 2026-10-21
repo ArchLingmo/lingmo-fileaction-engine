@@ -216,7 +216,9 @@ public static class Catalog
             try
             {
                 var info = await MediaProbe.ProbeAsync(ctx, item.Path);
-                var vf = filter(item, temp) + ",scale=out_color_matrix=bt709:out_range=tv,format=yuv420p";
+                // setparams: the frames carry the colour tags, otherwise ffmpeg writes the primaries and curve as "unknown".
+                var vf = filter(item, temp) + ",scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,"
+                         + "setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709";
                 List<string> args = [.. H264(ctx.Settings.VideoCrf, "medium", vf, "160k", info, toneMap: false),
                     "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", "-color_range", "tv"];
                 var output = await FfmpegBackend.TransformAsync(item, suffix, ctx, ctx.SubProgress(i, videos.Count), args, "mp4", duration: info.Duration);

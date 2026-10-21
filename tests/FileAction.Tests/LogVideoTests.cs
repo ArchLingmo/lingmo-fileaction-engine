@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using FileAction.Core;
 using FileAction.Core.Backends;
 using FileAction.Core.Operations;
@@ -85,11 +84,13 @@ public class LogVideoIntegrationTests : IDisposable
         return File.ReadAllBytes(raw);
     }
 
-    private async Task<JsonElement> Probe(string video)
+    /// <summary>What ffmpeg says about the file: streams and metadata (no ffprobe: CI ships only ffmpeg).</summary>
+    private async Task<string> Probe(string video)
     {
-        var ffprobe = Path.Combine(Path.GetDirectoryName(_tools.Ffmpeg!)!, OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe");
-        var json = await ProcessRunner.RunAsync(ffprobe, ["-v", "error", "-print_format", "json", "-show_streams", "-show_format", video], default);
-        return JsonDocument.Parse(json).RootElement;
+        var lines = new List<string>();
+        await ProcessRunner.RunAsync(_tools.Ffmpeg!, ["-hide_banner", "-y", "-i", video, "-f", "ffmetadata", Path.Combine(_dir, "meta.txt")], default,
+            line => { lock (lines) lines.Add(line); });
+        return string.Join('\n', lines);
     }
 
     [Fact]
@@ -108,10 +109,9 @@ public class LogVideoIntegrationTests : IDisposable
         Assert.Equal(Recorded, File.GetLastWriteTimeUtc(output));
 
         var probe = await Probe(output);
-        var stream = probe.GetProperty("streams")[0];
-        Assert.Equal("h264", stream.GetProperty("codec_name").GetString());
-        Assert.Equal("yuv420p", stream.GetProperty("pix_fmt").GetString());
-        Assert.StartsWith("2024-05-01T10:00:00", probe.GetProperty("format").GetProperty("tags").GetProperty("creation_time").GetString());
+        Assert.Contains("Video: h264", probe);
+        Assert.Contains("yuv420p(tv, bt709, progressive)", probe);
+        Assert.Matches(@"creation_time\s*: 2024-05-01T10:00:00", probe);
 
         // Middle grey comes out at about 42 % (107 of 255), neutral; log black goes to black.
         var grey = Pixels(output, 76, 86);
