@@ -28,7 +28,8 @@ public static class PandocBackend
         _ => throw new ConversionException(T($"Pandoc neumí zapsat formát {format}.", $"Pandoc cannot write {format}.")),
     };
 
-    public static async Task ConvertAsync(OperationContext ctx, string input, string inputFormat, string output, string format)
+    public static async Task ConvertAsync(OperationContext ctx, string input, string inputFormat, string output, string format,
+        IEnumerable<string>? extraArgs = null)
     {
         var pandoc = ctx.Tools.Require(ExternalTool.Pandoc);
         var inputDir = Path.GetDirectoryName(Path.GetFullPath(input));
@@ -79,6 +80,8 @@ public static class PandocBackend
             }
             if (inputDir is not null)
                 args.Add("--resource-path=" + inputDir);
+            if (extraArgs is not null)
+                args.AddRange(extraArgs);
             await ProcessRunner.RunAsync(pandoc, args, ctx.CancellationToken, workingDirectory: workingDirectory).ConfigureAwait(false);
         }
         finally

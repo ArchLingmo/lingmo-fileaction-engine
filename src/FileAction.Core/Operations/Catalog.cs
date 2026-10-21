@@ -311,7 +311,7 @@ public static class Catalog
         }
     }
 
-    private enum DocRoute { Pandoc, Office, PandocThenOffice, OfficeThenPandoc }
+    private enum DocRoute { Pandoc, Office, PandocThenOffice, OfficeThenPandoc, Browser, PandocThenBrowser }
 
     private static DocRoute? DocumentRoute(string input, string target, ToolLocator tools)
     {
@@ -319,6 +319,14 @@ public static class Catalog
         var office = tools.Has(ExternalTool.LibreOffice);
         bool pandocReads = Formats.PandocInputs.Contains(input), officeReads = input is "doc" or "docx" or "odt" or "rtf" or "txt" or "html";
         bool pandocWrites = target != "pdf", officeWrites = target is "pdf" or "docx" or "odt" or "txt" or "html" || (target == "rtf" && input != "html");
+        var browser = target == "pdf" && tools.Browser is not null;
+
+        // A web page printed by the browser looks exactly as it does on screen; Markdown goes the same way through
+        // pandoc's HTML (code blocks, tables and links come out as on GitHub, not as a Word document).
+        if (browser && input == "html")
+            return DocRoute.Browser;
+        if (browser && pandoc && input == "md")
+            return DocRoute.PandocThenBrowser;
 
         // HTML: pandoc embeds the pictures it links; LibreOffice would only link them (they vanish when the file moves).
         if (input == "html" && pandoc)
@@ -340,6 +348,9 @@ public static class Catalog
             return DocRoute.PandocThenOffice;
         if (pandoc && office && officeReads && pandocWrites)
             return DocRoute.OfficeThenPandoc;
+        // Without LibreOffice the rest still reaches PDF through a web page.
+        if (browser && pandoc && pandocReads)
+            return DocRoute.PandocThenBrowser;
         return null;
     }
 
@@ -354,6 +365,24 @@ public static class Catalog
                 return await OfficeBackend.ConvertAsync(item, target, ctx);
             case DocRoute.Pandoc:
                 return await OutputPaths.ProduceAsync(dir, item.BaseName, target, tmp => PandocBackend.ConvertAsync(ctx, item.Path, item.Format, tmp, target));
+            case DocRoute.Browser:
+                return await OutputPaths.ProduceAsync(dir, item.BaseName, target, tmp => BrowserBackend.PrintToPdfAsync(ctx, item.Path, tmp));
+            case DocRoute.PandocThenBrowser:
+            {
+                var temp = OutputPaths.TempDirectory();
+                try
+                {
+                    var css = Path.Combine(temp, "print.css");
+                    await File.WriteAllTextAsync(css, BrowserBackend.MarkdownCss, ctx.CancellationToken);
+                    var html = Path.Combine(temp, item.BaseName + ".html");
+                    await PandocBackend.ConvertAsync(ctx, item.Path, item.Format, html, "html", ["--css=" + css]);
+                    return await OutputPaths.ProduceAsync(dir, item.BaseName, target, tmp => BrowserBackend.PrintToPdfAsync(ctx, html, tmp));
+                }
+                finally
+                {
+                    OutputPaths.TryDelete(temp);
+                }
+            }
             case DocRoute.PandocThenOffice:
             {
                 var temp = OutputPaths.TempDirectory();

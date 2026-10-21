@@ -37,7 +37,56 @@ public sealed class ToolLocator
     public void Refresh()
     {
         lock (_cache)
+        {
             _cache.Clear();
+            _browserLooked = false;
+        }
+    }
+
+    private string? _browser;
+    private bool _browserLooked;
+
+    /// <summary>
+    /// Edge, Chrome or Chromium, which print HTML to PDF. Edge comes with every Windows 10 and 11, so Markdown and
+    /// web pages become PDFs without LibreOffice.
+    /// </summary>
+    public string? Browser
+    {
+        get
+        {
+            lock (_cache)
+            {
+                if (!_browserLooked)
+                {
+                    _browser = LocateBrowser();
+                    _browserLooked = true;
+                }
+                return _browser;
+            }
+        }
+    }
+
+    private static string? LocateBrowser()
+    {
+        if (IsWindows)
+        {
+            var roots = new[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            };
+            return roots.Where(r => !string.IsNullOrEmpty(r))
+                .SelectMany(r => new[]
+                {
+                    Path.Combine(r, "Microsoft", "Edge", "Application", "msedge.exe"),
+                    Path.Combine(r, "Google", "Chrome", "Application", "chrome.exe"),
+                })
+                .FirstOrDefault(File.Exists);
+        }
+        var names = new[] { "microsoft-edge", "google-chrome", "google-chrome-stable", "chromium", "chromium-browser" };
+        var dirs = (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+        return names.SelectMany(n => dirs.Select(d => Path.Combine(d, n))).FirstOrDefault(File.Exists);
     }
 
     public string Require(ExternalTool tool) =>

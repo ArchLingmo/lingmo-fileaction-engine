@@ -76,7 +76,8 @@ U více vybraných souborů se převede každý zvlášť. Nástroje typu „spo
 Obrázky, PDF, tabulky, titulky a archivy zvládá FileAction sám. Některé formáty potřebují další programy:
 
 - **FFmpeg** (audio a video, 34 MB) a **Pandoc** (dokumenty, 35 MB) se stáhnou, až je poprvé budete potřebovat: kolo ukazuje jejich výseče ztlumené s popiskem „stáhnout FFmpeg“ a po puštění souboru se jednou zeptá, nástroj stáhne (ověří jeho zveřejněný otisk SHA-256) a převod provede. Pokud je už máte nainstalované (např. `winget install Gyan.FFmpeg`), FileAction použije ty,
-- **LibreOffice** (DOC, PPTX, ODS, převod dokumentů a tabulek do PDF) je potřeba doinstalovat zvlášť: `winget install TheDocumentFoundation.LibreOffice`.
+- **LibreOffice** (DOC, PPTX, ODS, převod wordových dokumentů a tabulek do PDF) je potřeba doinstalovat zvlášť: `winget install TheDocumentFoundation.LibreOffice`.
+- Markdown a webové stránky převádí do PDF **Microsoft Edge** (je součástí Windows) nebo Chrome, LibreOffice k tomu netřeba.
 
 Co chybí, ukáže **Nastavení → Pomocné programy**, odkud jde i rovnou stáhnout nebo nainstalovat. Díky tomu, že nástroje nejsou v instalátoru, má instalátor jen asi 50 MB.
 
