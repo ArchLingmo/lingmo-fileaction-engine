@@ -30,22 +30,50 @@ public static class BrowserBackend
     /// <summary>Prints <paramref name="html"/> (a local file) to <paramref name="output"/>.</summary>
     public static async Task PrintToPdfAsync(OperationContext ctx, string html, string output)
     {
-        var browser = ctx.Tools.Browser ?? throw new ConversionException(T(
-            "Pro tisk do PDF je potřeba Microsoft Edge nebo Google Chrome.", "Printing to PDF needs Microsoft Edge or Google Chrome."));
+        var browsers = ctx.Tools.Browsers;
+        if (browsers.Count == 0)
+            throw new ConversionException(T("Pro tisk do PDF je potřeba Microsoft Edge nebo Google Chrome.", "Printing to PDF needs Microsoft Edge or Google Chrome."));
+        ConversionException? failure = null;
+        foreach (var browser in browsers)
+        {
+            // On Linux the browser's sandbox is often unusable (a setuid helper without its rights, user namespaces
+            // blocked by AppArmor); the page is the user's own local file, so it is then printed without it.
+            foreach (var sandbox in OperatingSystem.IsWindows() ? [true] : new[] { true, false })
+            {
+                try
+                {
+                    await PrintAsync(ctx, browser, html, output, sandbox).ConfigureAwait(false);
+                    return;
+                }
+                catch (ConversionException ex)
+                {
+                    failure = ex;
+                }
+            }
+        }
+        throw failure!;
+    }
+
+    private static async Task PrintAsync(OperationContext ctx, string browser, string html, string output, bool sandbox)
+    {
         // A profile of its own: otherwise a running Edge takes the job over and the command returns at once.
         var profile = OutputPaths.TempDirectory();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(2));
         try
         {
-            await ProcessRunner.RunAsync(browser,
-                [
-                    "--headless", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--disable-extensions",
-                    "--user-data-dir=" + profile,
-                    "--no-pdf-header-footer", "--print-to-pdf-no-header",
-                    "--print-to-pdf=" + Path.GetFullPath(output),
-                    new Uri(Path.GetFullPath(html)).AbsoluteUri,
-                ], timeout.Token).ConfigureAwait(false);
+            File.Delete(output);
+            List<string> args =
+            [
+                "--headless", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--disable-extensions",
+                "--user-data-dir=" + profile,
+                "--no-pdf-header-footer", "--print-to-pdf-no-header",
+                "--print-to-pdf=" + Path.GetFullPath(output),
+            ];
+            if (!sandbox)
+                args.Add("--no-sandbox");
+            args.Add(new Uri(Path.GetFullPath(html)).AbsoluteUri);
+            await ProcessRunner.RunAsync(browser, args, timeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!ctx.CancellationToken.IsCancellationRequested)
         {

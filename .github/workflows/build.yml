@@ -264,7 +264,7 @@ jobs:
 
   release:
     name: Publish release
-    needs: [version, windows, linux, arch]
+    needs: [version, core-tests-linux, windows, linux, arch]
     if: needs.version.outputs.publish == 'true'
     runs-on: ubuntu-latest
     env:

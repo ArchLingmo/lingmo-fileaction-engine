@@ -43,14 +43,17 @@ public sealed class ToolLocator
         }
     }
 
-    private string? _browser;
+    private List<string> _browsers = [];
     private bool _browserLooked;
 
     /// <summary>
     /// Edge, Chrome or Chromium, which print HTML to PDF. Edge comes with every Windows 10 and 11, so Markdown and
     /// web pages become PDFs without LibreOffice.
     /// </summary>
-    public string? Browser
+    public string? Browser => Browsers.FirstOrDefault();
+
+    /// <summary>Every browser found, best first: when one cannot print (a broken sandbox), the next one tries.</summary>
+    public IReadOnlyList<string> Browsers
     {
         get
         {
@@ -58,15 +61,15 @@ public sealed class ToolLocator
             {
                 if (!_browserLooked)
                 {
-                    _browser = LocateBrowser();
+                    _browsers = LocateBrowsers();
                     _browserLooked = true;
                 }
-                return _browser;
+                return _browsers;
             }
         }
     }
 
-    private static string? LocateBrowser()
+    private static List<string> LocateBrowsers()
     {
         if (IsWindows)
         {
@@ -82,11 +85,12 @@ public sealed class ToolLocator
                     Path.Combine(r, "Microsoft", "Edge", "Application", "msedge.exe"),
                     Path.Combine(r, "Google", "Chrome", "Application", "chrome.exe"),
                 })
-                .FirstOrDefault(File.Exists);
+                .Where(File.Exists)
+                .ToList();
         }
         var names = new[] { "microsoft-edge", "google-chrome", "google-chrome-stable", "chromium", "chromium-browser" };
         var dirs = (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
-        return names.SelectMany(n => dirs.Select(d => Path.Combine(d, n))).FirstOrDefault(File.Exists);
+        return names.Select(n => dirs.Select(d => Path.Combine(d, n)).FirstOrDefault(File.Exists)).OfType<string>().ToList();
     }
 
     public string Require(ExternalTool tool) =>
