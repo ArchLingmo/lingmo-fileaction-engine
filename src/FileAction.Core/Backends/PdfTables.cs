@@ -102,9 +102,17 @@ public static partial class PdfBackend
             tmp => Task.Run(() => SpreadsheetBackend.WriteXlsx(sheets, tmp, headerRow: true), ctx.CancellationToken)).ConfigureAwait(false);
     }
 
+    [GeneratedRegex(@"^-?\d{1,3}(?:\.\d{3})+(?:,\d+)?$")]
+    private static partial Regex DotThousandsRegex();
+
+    [GeneratedRegex(@"^(\d{1,2})/(\d{1,2})/(\d{4})$")]
+    private static partial Regex SlashDateRegex();
+
     /// <summary>
     /// "1 234,50 Kč" → "1 234,50": an amount with a currency becomes a number (the currency is in the header
     /// or the document anyway). English thousands separators ("1,234.50") are removed for the invariant reader.
+    /// Documents with a decimal comma may group thousands with dots ("1.234,56", Spain, Germany) and write
+    /// dates day first with slashes ("02/09/2026").
     /// </summary>
     private static string Money(string cell, CultureInfo culture)
     {
@@ -113,6 +121,13 @@ public static partial class PdfBackend
             value = (m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value).Trim();
         if (ReferenceEquals(culture, CultureInfo.InvariantCulture) && Regex.IsMatch(value, @"^-?\d{1,3}(,\d{3})+(\.\d+)?$"))
             value = value.Replace(",", "");
+        if (!ReferenceEquals(culture, CultureInfo.InvariantCulture))
+        {
+            if (DotThousandsRegex().IsMatch(value))
+                value = value.Replace(".", "");
+            else if (SlashDateRegex().Match(value) is { Success: true } date)
+                value = $"{date.Groups[1].Value}.{date.Groups[2].Value}.{date.Groups[3].Value}";
+        }
         return value.Length == 0 ? cell : value;
     }
 }

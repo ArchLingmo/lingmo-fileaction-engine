@@ -214,6 +214,9 @@ public static partial class SpreadsheetBackend
         var value = raw.Trim();
         if (value.Length == 0)
             return raw;
+        // A date first: "01.09.2026" starts with a zero like a code ("0123") but is still a date.
+        if (value.Length >= 8 && DateTime.TryParseExact(value, DateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+            return date;
         var digits = value.Count(char.IsDigit);
         if ((value.Length > 1 && value[0] == '0' && char.IsDigit(value[1])) || digits > 15)
             return raw;
@@ -229,8 +232,6 @@ public static partial class SpreadsheetBackend
                 && double.IsFinite(number))
                 return number;
         }
-        if (value.Length >= 8 && DateTime.TryParseExact(value, DateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
-            return date;
         return raw;
     }
 

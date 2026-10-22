@@ -207,8 +207,14 @@ public static partial class PdfStructure
                 {
                     var word = segment.Words[i];
                     var gap = word.BoundingBox.Left - segment.Words[i - 1].BoundingBox.Right;
+                    var before = segment.Words[i - 1].BoundingBox.Right;
                     var aligned = gap > 0.4 * line.Size
-                        && near.Count(r => r.Segments.Skip(1).Any(s => Math.Abs(s.Left - word.BoundingBox.Left) <= 1)) >= 2;
+                        && near.Count(r => r.Segments.Skip(1).Any(s => Math.Abs(s.Left - word.BoundingBox.Left) <= 1)) >= 2
+                        // Every row merges the same two cells ("-74,88 EUR", a right-aligned amount and its currency):
+                        // where both the end of one word and the start of the next line up on the rows around, the
+                        // gap is a column border, even if it is little wider than a space.
+                        || gap > 0.3 * line.Size && line.IsRow && near.Count(r => r.Segments.Any(s => s.Words.Skip(1).Select((w, k) => (w, k)).Any(p =>
+                            Math.Abs(p.w.BoundingBox.Left - word.BoundingBox.Left) <= 0.5 && Math.Abs(s.Words[p.k].BoundingBox.Right - before) <= 0.5))) >= 2;
                     if (aligned)
                     {
                         segments.Add(new Segment(current));
@@ -253,8 +259,12 @@ public static partial class PdfStructure
         var rows = region.Where(l => l.IsRow).ToList();
         var columns = Columns(rows.SelectMany(l => l.Segments));
         var ruled = RuleBetween(horizontal, previous.Baseline, line.Baseline, columns[0].Left, columns[^1].Right);
-        // Rows may be padded apart (more so between ruled cells); lines of one cell sit at line spacing.
-        if (distance > (ruled ? 4 : 3) * size)
+        // Rows may be padded apart (more so between ruled cells); lines of one cell sit at line spacing. Rows of
+        // three or more cells that fit the columns may sit further apart still (shaded, padded statement rows).
+        var limit = (ruled ? 4 : 3) * size;
+        if (line.IsRow && previous.IsRow && line.Segments.Count >= 3)
+            limit = 5 * size;
+        if (distance > limit)
             return false;
 
         if (line.IsRow)

@@ -50,6 +50,10 @@ public class PdfToExcelTests : IClassFixture<PdfToExcelTests.Samples>
                 </table>
                 """);
 
+            // An online-banking statement: shaded, padded rows set far apart, tight columns (a right-aligned amount
+            // almost touching its currency), Spanish numbers and dates.
+            Pdfs["bbva"] = Make(ctx, "extracto", Bbva());
+
             Pdfs["text"] = Make(ctx, "dopis", "<p>Vážený pane, děkujeme za objednávku. Příliš žluťoučký kůň úpěl ďábelské ódy.</p><p>S pozdravem</p>");
         }
 
@@ -69,6 +73,30 @@ public class PdfToExcelTests : IClassFixture<PdfToExcelTests.Samples>
             }
             statement.Append("</tbody></table><p>Konec výpisu.</p>");
             return statement.ToString();
+        }
+
+        private static string Bbva()
+        {
+            string Es(double v) => (v < 0 ? "-" : "") + Math.Abs(v).ToString("#,##0.00", System.Globalization.CultureInfo.GetCultureInfo("es-ES"))
+                .Replace(" ", "").Replace(" ", "");
+            var concepts = new[] { ("PAGO CON TARJETA MERCADONA MADRID", "Pago con tarjeta", -1), ("TRANSFERENCIA RECIBIDA DE JUAN GARCIA LOPEZ", "Transferencia", 1),
+                ("ADEUDO RECIBO IBERDROLA CLIENTES SAU", "Recibo", -1), ("BIZUM ENVIADO A MARIA", "Bizum", -1) };
+            var balance = 2450.37;
+            var rows = new StringBuilder();
+            for (var i = 0; i < 40; i++)
+            {
+                var (concept, kind, sign) = concepts[i % concepts.Length];
+                var amount = sign * (i * 37.13 % 1500 + 12.5);
+                balance += amount;
+                var date = $"{i / 2 + 1:00}/09/2026";
+                rows.Append($"<tr{(i % 2 == 1 ? " style=\"background:#f0f0f0\"" : "")}><td>{date}</td><td>{date}</td><td>{concept}</td><td>{kind}</td>"
+                    + $"<td align=\"right\">{Es(amount)}</td><td>EUR</td><td align=\"right\">{Es(balance)}</td><td>EUR</td></tr>");
+            }
+            return "<style>body{font-family:Arial;font-size:8pt} td,th{font-size:7.5pt;padding:2px 3px} th{text-align:left;border-bottom:1px solid #000}</style>"
+                + "<p><b>BBVA</b></p><p>Movimientos de la cuenta</p>"
+                + "<table><tr><td>Titular:</td><td>EJEMPLO PEREZ, ANA</td></tr><tr><td>Cuenta:</td><td>ES12 0182 0000 0000 0000 0000</td></tr></table>"
+                + "<table cellspacing=\"0\" width=\"100%\"><tr><th>F. Contable</th><th>F. Valor</th><th>Concepto</th><th>Movimiento</th><th align=\"right\">Importe</th>"
+                + "<th>Divisa</th><th align=\"right\">Disponible</th><th>Divisa</th></tr>" + rows + "</table>";
         }
 
         private static string Czech(double value) => value.ToString("#,##0.00", System.Globalization.CultureInfo.GetCultureInfo("cs-CZ")).Replace(' ', ' ');
@@ -168,6 +196,22 @@ public class PdfToExcelTests : IClassFixture<PdfToExcelTests.Samples>
         Assert.Equal(1234.5, ws.Cell(2, 2).GetDouble(), 2);
         Assert.Equal(0.125, ws.Cell(2, 3).GetDouble(), 4);
         Assert.Equal(-0.03, ws.Cell(3, 3).GetDouble(), 4);
+    }
+
+    [Fact]
+    public async Task Spanish_bank_statement_with_shaded_rows()
+    {
+        using var book = await Convert("bbva");
+        if (book is null)
+            return;
+        var ws = Assert.Single(book.Worksheets);
+        Assert.Equal(["F. Contable", "F. Valor", "Concepto", "Movimiento", "Importe", "Divisa", "Disponible", "Divisa"],
+            ws.Row(1).CellsUsed().Select(c => c.GetText()).ToArray());
+        Assert.Equal(41, ws.LastRowUsed()!.RowNumber());
+        Assert.Equal(new DateTime(2026, 9, 1), ws.Cell(2, 1).GetDateTime());
+        Assert.Equal(-12.5, ws.Cell(2, 5).GetDouble(), 2);
+        Assert.Equal("EUR", ws.Cell(2, 6).GetText());
+        Assert.Equal(XLDataType.Number, ws.Cell(41, 7).DataType);
     }
 
     [Fact]
