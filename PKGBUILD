@@ -41,8 +41,14 @@ _srcroot() {
 build() {
   local src dotnet
   src=$(_srcroot)
-  # Arch's dotnet-sdk, else a user install (~/.dotnet)
-  dotnet=${DOTNET:-$(command -v dotnet || echo "$HOME/.dotnet/dotnet")}
+  # Arch's dotnet-sdk, else a user install (~/.dotnet). /usr/bin/dotnet alone (dotnet-runtime,
+  # which lingmo-desktop installs) has no SDK: take the first dotnet that lists one
+  dotnet=${DOTNET:-}
+  if [ -z "$dotnet" ]; then
+    for dotnet in $(command -v dotnet) "$HOME/.dotnet/dotnet"; do
+      [ -n "$("$dotnet" --list-sdks 2>/dev/null)" ] && break
+    done
+  fi
   export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
   "$dotnet" publish "$src/src/FileAction.Lingmo/FileAction.Lingmo.csproj" -c Release \
     -r linux-x64 --self-contained false -p:UseAppHost=false -p:DebugType=none \
